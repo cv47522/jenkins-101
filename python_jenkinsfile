@@ -18,7 +18,7 @@ pipeline {
                         python -V
                         pip list
                         python -m venv venv
-                        . ./.venv/bin/activate
+                        . ./venv/bin/activate
                         pip install -r requirements.txt
                         pip list
                     """
@@ -31,6 +31,7 @@ pipeline {
                 dir('myapp') {
                 echo 'Testing...'
                     sh """
+                        . ./venv/bin/activate
                         python hello.py
                         python hello.py --name=Alice
                     """
