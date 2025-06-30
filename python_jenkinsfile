@@ -12,7 +12,7 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                dir('my-app') {
+                dir('myapp') {
                     echo 'Building...'
                     sh """
                         python -V
@@ -28,7 +28,7 @@ pipeline {
 
         stage('Test') {
             steps {
-                dir('my-app') {
+                dir('myapp') {
                 echo 'Testing...'
                     sh """
                         python hello.py
