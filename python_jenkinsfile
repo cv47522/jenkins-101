@@ -1,0 +1,47 @@
+pipeline {
+    agent {
+        node {
+            label 'docker-agent-python'
+        }
+    }
+    
+    triggers {
+        pollSCM 'H/5 * * * *'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                dir('my-app') {
+                    echo 'Building...'
+                    sh """
+                        python -V
+                        python -m venv venv
+                        pip install -r requirements.txt
+                    """
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                dir('my-app') {
+                echo 'Testing...'
+                    sh """
+                        python hello.py
+                        python hello.py --name=Alice
+                    """
+                }
+            }
+        }
+
+        stage('Deliver') {
+            steps {
+                echo 'Delivering...'
+                sh """
+                    echo 'Doing deliver stuff...'
+                """
+            }
+        }
+    }
+}
