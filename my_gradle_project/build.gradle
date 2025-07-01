@@ -1,0 +1,17 @@
+plugins {
+    id 'java'
+}
+
+// Apply shared configuration to all subprojects
+subprojects {
+    plugins {
+        id 'java'
+    }
+
+    java {
+        toolchain {
+            // Compile, test, javadoc all use JDK 21
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+}
