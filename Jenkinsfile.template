@@ -11,10 +11,10 @@ pipeline {
         pollSCM 'H/5 * * * *'
     }
 
-    toos {
-        // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
-        gradle
-    }
+    // tools {
+    //     // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
+    //     gradle
+    // }
 
     options {
         disableConcurrentBuilds()
@@ -32,7 +32,7 @@ pipeline {
         choice(
             name: 'DOCKER_TARGET_REPO',
             choices: ['my-docker-candidates', 'my-docker-inprogress'],
-            description: 'Select the artifactory to upload the local built image'
+            description: 'Select the artifactory to upload the locally built image'
         )
         string(
             name: 'IMAGE_UPLOAD_FOLDER',
@@ -61,18 +61,16 @@ pipeline {
                 script {
                     gv = load 'myscript.groovy'
                 }
+                echo "Jenkins branch: ${env.BRANCH_NAME}"
             }
         }
 
         stage('Build') {
-            when {
-                expression {
-                    ['dev', 'master'].contains(env.BRANCH_NAME)
-                }
-            }
             steps {
                 dir('myapp') {
-                    gv.buildApp()
+                    script {
+                        gv.buildApp()
+                    }
                     sh """
                         python -V
                         pip list
@@ -88,33 +86,37 @@ pipeline {
         stage('Test') {
             when { expression { params.RUN_TEST } }
             steps {
-                dir('myapp') {
-                    gv.testApp()
-                    sh """
-                        . ./venv/bin/activate
-                        python hello.py
-                        python hello.py --name=Alice
-                    """
+                script {
+                    dir('myapp') {
+                        gv.testApp()
+                        sh """
+                            . ./venv/bin/activate
+                            python hello.py
+                            python hello.py --name=Alice
+                        """
+                    }
                 }
             }
         }
 
-        stage('Depoly') {
+        stage('Deploy') {
             steps {
-                gv.deployApp()
+                script {
+                    gv.deployApp()
+                }
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'gerrit',
                         usernameVariable: 'GERRIT_USERNAME',
                         passwordVariable: 'GERRIT_PASSWORD'),
-                    usernamePassword(
-                        credentialsId: 'jira-integration',
-                        usernameVariable: 'jira_USERNAME',
-                        passwordVariable: 'jira_PASSWORD'),
-                    usernamePassword(
-                        credentialsId: 'jenkins-passwd',
-                        usernameVariable: 'JENKINS_USERNAME',
-                        passwordVariable: 'JENKINS_PASSWORD')
+                    // usernamePassword(
+                    //     credentialsId: 'jira-integration',
+                    //     usernameVariable: 'jira_USERNAME',
+                    //     passwordVariable: 'jira_PASSWORD'),
+                    // usernamePassword(
+                    //     credentialsId: 'jenkins-passwd',
+                    //     usernameVariable: 'JENKINS_USERNAME',
+                    //     passwordVariable: 'JENKINS_PASSWORD')
                 ])
                 {
                     sh """
@@ -127,13 +129,13 @@ pipeline {
 
     post {
         always {
-            // 
+            echo 'Doing post-actions' 
         }
-        suceess {
-            // 
+        success {
+            echo 'Success'
         }
         failure {
-            // 
+            echo 'Fail'
         }
     }
 }
