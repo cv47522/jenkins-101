@@ -11,13 +11,13 @@ pipeline {
         pollSCM 'H/5 * * * *'
     }
 
-    // tools {
-    //     // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
-    //     gradle
-    // }
+    tools {
+        // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
+        gradle 'Gradle-8.14'
+    }
 
     options {
-        disableConcurrentBuilds()
+        // disableConcurrentBuilds()
         buildDiscarder(logRotator(daysToKeepStr: '14', artifactDaysToKeepStr: '1'))
         timestamps()
         timeout(time: 1, unit: 'HOURS')
@@ -59,7 +59,7 @@ pipeline {
         stage('Init') {
             steps {
                 script {
-                    gv = load 'myscript.groovy'
+                    gv = load 'myScript.groovy'
                 }
                 echo "Jenkins branch: ${env.BRANCH_NAME}"
             }
@@ -67,7 +67,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                dir('myapp') {
+                dir('my_python_app') {
                     script {
                         gv.buildApp()
                     }
@@ -87,7 +87,7 @@ pipeline {
             when { expression { params.RUN_TEST } }
             steps {
                 script {
-                    dir('myapp') {
+                    dir('my_python_app') {
                         gv.testApp()
                         sh """
                             . ./venv/bin/activate
