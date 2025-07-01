@@ -80,6 +80,13 @@ pipeline {
                         pip list
                     """
                 }
+
+                dir('my_gradle_project') {
+                    sh """
+                        ./gradlew -v
+                        ./gradlew build
+                    """
+                }
             }
         }
 
