@@ -82,7 +82,18 @@ pipeline {
                 }
 
                 dir('my_gradle_project') {
+                    echo 'Using Gradle binary from Jenkins tools block...'
                     sh """
+                        java -version
+                        javac -version
+
+                        gradle -v
+                        gradle build
+                    """
+
+                    echo 'Using Gradle binary from the repo...'
+                    sh """
+                        chmod +x ./gradlew
                         ./gradlew -v
                         ./gradlew build
                     """
