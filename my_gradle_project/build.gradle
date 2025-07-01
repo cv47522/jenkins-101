@@ -4,9 +4,7 @@ plugins {
 
 // Apply shared configuration to all subprojects
 subprojects {
-    plugins {
-        id 'java'
-    }
+    apply plugin: 'java'
 
     java {
         toolchain {
