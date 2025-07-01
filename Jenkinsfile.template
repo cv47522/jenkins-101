@@ -13,7 +13,7 @@ pipeline {
 
     tools {
         // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
-        gradle 'Gradle-8.14'
+        gradle 'Gradle-8.14' // TODO: Add a Gradlee installation to Jenkins/Tools
     }
 
     options {
@@ -65,7 +65,21 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build Frontend') {
+            agent { node { label 'docker-agent-nodejs' } } // TODO: Add a new Jenkins Agent image with node installed
+            steps {
+                nodejs('Node-24.3') { // TODO: Add a Node installation to Jenkins/Tools
+                    sh """
+                        node --version
+                        yarn --version
+                    """
+                    // sh "yarn install && yran build"
+                }
+            }
+        }
+
+
+        stage('Build Backend') {
             steps {
                 dir('my_python_app') {
                     script {
