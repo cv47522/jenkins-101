@@ -7,7 +7,7 @@ void testApp() {
 }
 
 void deployApp() {
-    echo "Deploying the application image ${params.IMAGE_NAME}:${params.VERSION}..."
+    echo "Deploying the application image ${params.IMAGE_NAME}:${params.IMAGE_TAG}..."
 }
 
 return this
