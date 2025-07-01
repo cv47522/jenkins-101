@@ -1,0 +1,14 @@
+# TODO: Run $ docker build -f ./Dockerfile_jenkins_agent_nodejs -t agents:nodejs .
+# TODO: Upload image to Docker Registry for Jenkins Master to pull
+# TODO: Pull & Run locally for testing or install more pkg: $ docker run -itd --name agent-python my-docker-candidates.example.com/jenkins/agents:nodejs
+FROM jenkins/agent:alpine-jdk21
+
+USER root
+
+# `apk add`: Alpine pkg installation CMD
+RUN apk add --update nodejs npm && \
+    npm install -g yarn@1.22.22 && \
+    node --version && \
+    yarn node --version
+
+USER jenkins
