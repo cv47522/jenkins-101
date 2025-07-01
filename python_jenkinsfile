@@ -12,8 +12,8 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                dir('myapp') {
-                    echo 'Building...'
+                dir('my_python_app') {
+                    echo "Building the application..."
                     sh """
                         python -V
                         pip list
@@ -28,8 +28,8 @@ pipeline {
 
         stage('Test') {
             steps {
-                dir('myapp') {
-                echo 'Testing...'
+                dir('my_python_app') {
+                echo 'Testing the application...'
                     sh """
                         . ./venv/bin/activate
                         python hello.py
@@ -39,9 +39,9 @@ pipeline {
             }
         }
 
-        stage('Deliver') {
+        stage('Deploy') {
             steps {
-                echo 'Delivering...'
+                echo 'Deploying the application...'
                 sh """
                     echo 'Doing deliver stuff...'
                 """
