@@ -1,6 +1,6 @@
 # TODO: Run $ docker build -f ./Dockerfile_jenkins_agent_python3 -t agents:python3 .
 # TODO: Upload image to Docker Registry for Jenkins Master to pull
-# TODO: Pull & Run locally for testing or install more pkg: $ docker run -itd --name agent-python agents:python3
+# TODO: Pull & Run locally for testing or install more pkg: $ docker run -itd --name agent-python my-docker-candidates.example.com/jenkins/agents:python3
 FROM jenkins/agent:alpine-jdk21
 
 USER root
