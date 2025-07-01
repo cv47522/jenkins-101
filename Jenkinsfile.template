@@ -1,36 +1,139 @@
+def gv
+
 pipeline {
     agent {
         node {
-            label 'your-jenkins-agent'
+            label 'docker-agent-python'
         }
+    }
+    
+    triggers {
+        pollSCM 'H/5 * * * *'
+    }
+
+    toos {
+        // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
+        gradle
+    }
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(daysToKeepStr: '14', artifactDaysToKeepStr: '1'))
+        timestamps()
+        timeout(time: 1, unit: 'HOURS')
+    }
+
+    parameters{
+        booleanParam(
+            name: 'RUN_TEST',
+            defaultValue: true,
+            description: 'Run test or not'
+        )
+        choice(
+            name: 'DOCKER_TARGET_REPO',
+            choices: ['my-docker-candidates', 'my-docker-inprogress'],
+            description: 'Select the artifactory to upload the local built image'
+        )
+        string(
+            name: 'IMAGE_UPLOAD_FOLDER',
+            defaultValue: 'dummy/',
+            description: 'Will be converted into, e.g., https://www.example.com/artifactory/my-docker-candidates/${IMAGE_UPLOAD_FOLDER}/'
+        )
+        string(
+            name: 'IMAGE_NAME',
+            defaultValue: 'my_image',
+            description: 'Will be converted into, e.g., my-docker-candidates/dummy/${IMAGE_NAME}'
+        )
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '1.0.0',
+            description: 'Image tag'
+        )
+    }
+
+    environment {
+        PROJECTDIR = "${WORKSPACE}"
     }
 
     stages {
-        stage('Build') {
+        stage('Init') {
             steps {
-                echo 'Building...'
-                sh """
-                    echo 'Doing build stuff...'
-                """
+                script {
+                    gv = load 'myscript.groovy'
+                }
+            }
+        }
+
+        stage('Build') {
+            when {
+                expression {
+                    ['dev', 'master'].contains(env.BRANCH_NAME)
+                }
+            }
+            steps {
+                dir('myapp') {
+                    gv.buildApp()
+                    sh """
+                        python -V
+                        pip list
+                        python -m venv venv
+                        . ./venv/bin/activate
+                        pip install -r requirements.txt
+                        pip list
+                    """
+                }
             }
         }
 
         stage('Test') {
+            when { expression { params.RUN_TEST } }
             steps {
-                echo 'Testing...'
-                sh """
-                    echo 'Doing test stuff...'
-                """
+                dir('myapp') {
+                    gv.testApp()
+                    sh """
+                        . ./venv/bin/activate
+                        python hello.py
+                        python hello.py --name=Alice
+                    """
+                }
             }
         }
 
-        stage('Deliver') {
+        stage('Depoly') {
             steps {
-                echo 'Delivering...'
-                sh """
-                    echo 'Doing deliver stuff...'
-                """
+                gv.deployApp()
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'gerrit',
+                        usernameVariable: 'GERRIT_USERNAME',
+                        passwordVariable: 'GERRIT_PASSWORD'),
+                    usernamePassword(
+                        credentialsId: 'jira-integration',
+                        usernameVariable: 'jira_USERNAME',
+                        passwordVariable: 'jira_PASSWORD'),
+                    usernamePassword(
+                        credentialsId: 'jenkins-passwd',
+                        usernameVariable: 'JENKINS_USERNAME',
+                        passwordVariable: 'JENKINS_PASSWORD')
+                ])
+                {
+                    sh """
+                        echo 'Doing deploy stuff...'
+                    """
+                }
             }
+        }
+    }
+
+    post {
+        always {
+            // 
+        }
+        suceess {
+            // 
+        }
+        failure {
+            // 
         }
     }
 }
