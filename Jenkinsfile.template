@@ -1,173 +1,189 @@
 def gv
 
 pipeline {
-    agent {
-        node {
-            label 'docker-agent-python'
+  agent {
+    node {
+      label 'docker-agent-python'
+    }
+  }
+
+  triggers {
+    pollSCM 'H/5 * * * *'
+  }
+
+  tools {
+    // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
+    gradle 'Gradle-8.14' // TODO: Add a Gradlee installation to Jenkins/Tools
+  }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '14', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 1, unit: 'HOURS')
+  }
+
+  parameters{
+    booleanParam(
+      name: 'RUN_TEST',
+      defaultValue: true,
+      description: 'Run test or not'
+    )
+    choice(
+      name: 'DOCKER_TARGET_REPO',
+      choices: ['my-docker-candidates', 'my-docker-inprogress'],
+      description: 'Select the artifactory to upload the locally built image'
+    )
+    string(
+      name: 'IMAGE_UPLOAD_FOLDER',
+      defaultValue: 'dummy/',
+      description: 'Will be converted into, e.g., https://www.example.com/artifactory/my-docker-candidates/${IMAGE_UPLOAD_FOLDER}/'
+    )
+    string(
+      name: 'IMAGE_NAME',
+      defaultValue: 'my_image',
+      description: 'Will be converted into, e.g., my-docker-candidates/dummy/${IMAGE_NAME}'
+    )
+    string(
+      name: 'IMAGE_TAG',
+      defaultValue: '1.0.0',
+      description: 'Image tag'
+    )
+  }
+
+  environment {
+    PROJECTDIR = "${WORKSPACE}"
+  }
+
+  stages {
+    stage('Init') {
+      steps {
+        script {
+          gv = load 'myScript.groovy'
         }
-    }
-    
-    triggers {
-        pollSCM 'H/5 * * * *'
+        echo "Jenkins branch: ${env.BRANCH_NAME}"
+      }
     }
 
-    tools {
-        // Access build tools (e.g., Gradle, Maven, yarn, JS) for projects
-        gradle 'Gradle-8.14' // TODO: Add a Gradlee installation to Jenkins/Tools
+    stage('Build Frontend') {
+    agent { node { label 'docker-agent-nodejs' } } // TODO: Add a new Jenkins Agent image with node installed
+      steps {
+        nodejs('Node-24.3') { // TODO: Add a Node installation to Jenkins/Tools
+          sh """
+            node --version
+            yarn --version
+          """
+          // sh "yarn install && yran build"
+        }
+      }
     }
 
-    options {
-        // disableConcurrentBuilds()
-        buildDiscarder(logRotator(daysToKeepStr: '14', artifactDaysToKeepStr: '1'))
-        timestamps()
-        timeout(time: 1, unit: 'HOURS')
-    }
-
-    parameters{
-        booleanParam(
-            name: 'RUN_TEST',
-            defaultValue: true,
-            description: 'Run test or not'
-        )
-        choice(
-            name: 'DOCKER_TARGET_REPO',
-            choices: ['my-docker-candidates', 'my-docker-inprogress'],
-            description: 'Select the artifactory to upload the locally built image'
-        )
-        string(
-            name: 'IMAGE_UPLOAD_FOLDER',
-            defaultValue: 'dummy/',
-            description: 'Will be converted into, e.g., https://www.example.com/artifactory/my-docker-candidates/${IMAGE_UPLOAD_FOLDER}/'
-        )
-        string(
-            name: 'IMAGE_NAME',
-            defaultValue: 'my_image',
-            description: 'Will be converted into, e.g., my-docker-candidates/dummy/${IMAGE_NAME}'
-        )
-        string(
-            name: 'IMAGE_TAG',
-            defaultValue: '1.0.0',
-            description: 'Image tag'
-        )
-    }
-
-    environment {
-        PROJECTDIR = "${WORKSPACE}"
-    }
-
-    stages {
-        stage('Init') {
-            steps {
-                script {
-                    gv = load 'myScript.groovy'
-                }
-                echo "Jenkins branch: ${env.BRANCH_NAME}"
+    stage('Parallel: Build Backend') {
+      parallel {
+        stage('Build Python App') {
+          steps {
+            dir('my_python_app') {
+              script {
+                gv.buildApp()
+              }
+              sh """
+                python -V
+                pip list
+                python -m venv venv
+                . ./venv/bin/activate
+                pip install -r requirements.txt
+                pip list
+              """
             }
+          }
         }
 
-        stage('Build Frontend') {
-            agent { node { label 'docker-agent-nodejs' } } // TODO: Add a new Jenkins Agent image with node installed
-            steps {
-                nodejs('Node-24.3') { // TODO: Add a Node installation to Jenkins/Tools
-                    sh """
-                        node --version
-                        yarn --version
-                    """
-                    // sh "yarn install && yran build"
-                }
+        stage('Build Gradle App') {
+          steps {
+            dir('my_gradle_project') {
+              echo 'Using Gradle binary from Jenkins tools block...'
+              sh """
+              java -version
+              javac -version
+
+              gradle -v
+              gradle build
+              """
+
+              echo 'Using Gradle binary from the Git repo...'
+              sh """
+              chmod +x ./gradlew
+              ./gradlew -v
+              ./gradlew build
+              """
             }
+          }
         }
 
-
-        stage('Build Backend') {
-            steps {
-                dir('my_python_app') {
-                    script {
-                        gv.buildApp()
-                    }
-                    sh """
-                        python -V
-                        pip list
-                        python -m venv venv
-                        . ./venv/bin/activate
-                        pip install -r requirements.txt
-                        pip list
-                    """
-                }
-
-                dir('my_gradle_project') {
-                    echo 'Using Gradle binary from Jenkins tools block...'
-                    sh """
-                        java -version
-                        javac -version
-
-                        gradle -v
-                        gradle build
-                    """
-
-                    echo 'Using Gradle binary from the repo...'
-                    sh """
-                        chmod +x ./gradlew
-                        ./gradlew -v
-                        ./gradlew build
-                    """
-                }
-            }
+        stage('Build Node App') {
+          agent { label 'docker-agent-nodejs' }
+          steps {
+            sh """
+             yarn --version
+            """
+          }
         }
-
-        stage('Test') {
-            when { expression { params.RUN_TEST } }
-            steps {
-                script {
-                    dir('my_python_app') {
-                        gv.testApp()
-                        sh """
-                            . ./venv/bin/activate
-                            python hello.py
-                            python hello.py --name=Alice
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    gv.deployApp()
-                }
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'gerrit',
-                        usernameVariable: 'GERRIT_USERNAME',
-                        passwordVariable: 'GERRIT_PASSWORD'),
-                    // usernamePassword(
-                    //     credentialsId: 'jira-integration',
-                    //     usernameVariable: 'jira_USERNAME',
-                    //     passwordVariable: 'jira_PASSWORD'),
-                    // usernamePassword(
-                    //     credentialsId: 'jenkins-passwd',
-                    //     usernameVariable: 'JENKINS_USERNAME',
-                    //     passwordVariable: 'JENKINS_PASSWORD')
-                ])
-                {
-                    sh """
-                        echo 'Doing deploy stuff...'
-                    """
-                }
-            }
-        }
+      }
     }
 
-    post {
-        always {
-            echo 'Doing post-actions' 
+    stage('Test') {
+      when { expression { params.RUN_TEST } }
+      steps {
+        script {
+          dir('my_python_app') {
+            gv.testApp()
+            sh """
+              . ./venv/bin/activate
+              python hello.py
+              python hello.py --name=Alice
+            """
+          }
         }
-        success {
-            echo 'Success'
-        }
-        failure {
-            echo 'Fail'
-        }
+      }
     }
+
+    stage('Deploy') {
+      steps {
+        script {
+          gv.deployApp()
+        }
+        withCredentials([
+          usernamePassword(
+          credentialsId: 'gerrit',
+          usernameVariable: 'GERRIT_USERNAME',
+          passwordVariable: 'GERRIT_PASSWORD'),
+          // usernamePassword(
+          // credentialsId: 'jira-integration',
+          // usernameVariable: 'jira_USERNAME',
+          // passwordVariable: 'jira_PASSWORD'),
+          // usernamePassword(
+          // credentialsId: 'jenkins-passwd',
+          // usernameVariable: 'JENKINS_USERNAME',
+          // passwordVariable: 'JENKINS_PASSWORD')
+        ])
+        {
+          sh """
+          echo 'Doing deploy stuff...'
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      echo 'Doing post-actions' 
+    }
+    success {
+      echo 'Success'
+    }
+    failure {
+      echo 'Fail'
+    }
+  }
 }
