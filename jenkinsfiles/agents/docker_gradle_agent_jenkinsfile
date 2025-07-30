@@ -1,0 +1,128 @@
+
+
+/** Global variables used inside functions **/
+// Constants
+// @Field String VAR_WITH_FIELD = 'original value2'
+// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+
+// Variables
+// varWithDynamicValue = ''
+
+
+/** Global variables used outside functions **/
+// Constants
+// String VAR_WITHOUT_FIELD = 'original value1'
+
+// Variables
+String gradleCmd = ''
+
+pipeline {
+  agent { label 'docker-agent-gradle-java21-alpine' }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 10, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    GRADLE_PROJECT = "${PROJECT_DIR}/gradle_project"
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CHECKOUT_REPO',
+      defaultValue: false,
+      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+  }
+
+  stages {
+    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+      when { expression { params.CHECKOUT_REPO } }
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          userRemoteConfigs: [[ url: 'https://github.com/cv47522/jenkins-101.git' ]]
+        ])
+      }
+    }
+
+    stage('Build') {
+      steps {
+        script {
+          dir(GRADLE_PROJECT) {
+            // Decide which Gradle command to use
+            gradleCmd = fileExists('./gradlew') ? './gradlew' : 'gradle'
+            if (gradleCmd == './gradlew') {
+              // Ensure the wrapper is executable
+              sh 'chmod +x ./gradlew'
+            }
+
+            echo "------------ Building with: ${gradleCmd} ------------"
+            sh """
+              ls -l
+              java -version
+              javac -version
+              ${gradleCmd} -v
+              ${gradleCmd} clean compileJava --info
+              ls -l ./app/build/
+            """
+          }
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir(GRADLE_PROJECT) {
+          echo "------------ Testing ------------"
+          sh """
+            ${gradleCmd} test
+          """
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        dir(GRADLE_PROJECT) {
+          echo "------------ Packaging ------------"
+          sh """
+            ${gradleCmd} jar
+            ls -l ./app/build/libs
+          """
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        dir(GRADLE_PROJECT) {
+          echo "------------ Deploying ------------"
+          sh """
+            ${gradleCmd} publish --info
+            ls -l ./build/localrepo/com/example/app
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(GRADLE_PROJECT) {
+        // For simple APP, Archive artifacts got from Gradle build library created by: $ ./gradlew build
+        // archiveArtifacts artifacts: '**/build/libs/*.jar', fingerprint: true
+
+        // For complex APP, Archive artifacts got from local Maven repo created by: $ ./gradlew build publish
+        archiveArtifacts artifacts: 'build/localrepo/**/*.jar, build/localrepo/**/*.pom', fingerprint: true
+      }
+      cleanWs()
+    }
+  }
+}
