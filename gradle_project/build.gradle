@@ -1,0 +1,52 @@
+plugins {
+  id 'maven-publish'
+}
+
+group = 'com.example'
+version = '1.0.0'
+String centralRepo = "$rootProject.buildDir/localrepo"
+
+// Apply shared configuration to all subprojects
+subprojects {
+  apply plugin: 'java'
+
+  java {
+    toolchain {
+      // Compile, test, javadoc all use JDK 21
+      languageVersion = JavaLanguageVersion.of(21)
+    }
+  }
+
+  repositories {
+    mavenCentral()
+  }
+
+  dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+  }
+
+  test {
+    useJUnitPlatform() // JUnit 5
+  }
+
+  publishing { // Run: $ ./gradlew publish
+    publications {
+      // `mavenJava(MavenPublication)` is fine if you're happy with one fixed publication name per project.
+      /* `"${project.name}Maven"(MavenPublication)` lets you programmatically derive the publication name from the project's name, 
+        which keeps things clear and collision-free in multi-module or centralized build scripts.
+      */
+      "${project.name}"(MavenPublication) {
+        from components.java
+        artifactId = project.name // so JAR is named app-1.0.0.jar, list-1.0.0.jar, etc.
+      }
+    }
+
+    repositories {
+      maven {
+        name = 'local'
+        // Publish .jar to local dir, here: gradle_project/build/localrepo
+        url = uri(centralRepo)
+      }
+    }
+  }
+}
