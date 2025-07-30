@@ -1,0 +1,24 @@
+# TODO: Run $ docker buildx build --no-cache --progress=plain -f ./Dockerfile_jenkins_agent_python312_alpine -t agent:python312-alpine .
+# TODO: Upload image to Docker Registry for Jenkins Master to pull
+# TODO: Pull & Run locally for testing or install more pkg: $ docker run -itd --name agent-python agent:python312-alpine
+FROM agent:alpine3.22-jdk21
+
+# Env vars improve logging & skip pip's version check noise.
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+USER root
+
+# TODO: Check the latest Alpine repo branch that has Python 3.12 pkg:
+# https://pkgs.alpinelinux.org/packages?name=python3&branch=v3.22&repo=&arch=x86_64&origin=&flagged=&maintainer=
+RUN apk add --update --no-cache \
+    gcc python3-dev py3-wheel musl-dev linux-headers \
+    python3~3.12 \
+    py3-pip \
+    py3-virtualenv && \
+  ln -sf /usr/bin/python3 /usr/bin/python && \
+  echo '-------- Python Version (v3.12.?)  --------' && \
+  python -V && \
+  adduser -D -u 1000 jenkins 2>/dev/null || true   # base image already has it, safe no-op
+
+USER jenkins
