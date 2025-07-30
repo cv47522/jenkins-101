@@ -1,0 +1,11 @@
+blueocean
+build-timeout:latest
+credentials-binding
+docker-workflow:latest
+git:latest
+github:latest
+json-path-api
+kubernetes:latest
+pipeline-stage-view:latest
+ssh-slaves:latest
+workflow-aggregator:latest
