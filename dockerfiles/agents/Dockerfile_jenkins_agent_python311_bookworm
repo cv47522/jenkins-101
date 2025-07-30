@@ -1,0 +1,21 @@
+# TODO: Run $ docker buildx build --no-cache --progress=plain -f ./Dockerfile_jenkins_agent_python311_bookworm -t agent:python311-bookworm .
+# TODO: Upload image to Docker Registry for Jenkins Master to pull
+# TODO: Pull & Run locally for testing or install more pkg: $ docker run -itd --name agent-python agent:python311-bookworm
+FROM agent:bookworm-jdk21
+
+ENV PYTHONUNBUFFERED=1
+
+USER root
+
+# Bookworm pkg installation CMD
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc python3-setuptools python3-wheel python3-dev build-essential \
+        python3 python3-venv python3-pip && \
+    ln -sf /usr/bin/python3 /usr/bin/python && \
+    echo '-------- Python Version (v3.11.?) --------' && \
+    python --version && pip --version && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+USER jenkins
