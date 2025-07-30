@@ -1,0 +1,15 @@
+# TODO: Run $ docker buildx build --no-cache --progress=plain -f ./Dockerfile_jenkins_agent_maven_alpine -t agent:maven-alpine .
+# TODO: Upload image to Docker Registry for Jenkins Master to pull
+# TODO: Pull & Run locally for testing or install more pkg: $ docker run -itd --name agent:maven-alpine
+FROM jenkins/agent:alpine-jdk21
+
+USER root
+
+# `apk add`: Alpine pkg installation CMD
+# Install Maven (and any other build tools)
+#    Alpine's repo may be slightly older; pin or download binary if you need 3.9.11 exactly
+RUN apk add --update --no-cache maven=3.9.9-r0 git openssh-client
+
+USER jenkins
+# Entrypoint and agent JAR are inherited from jenkins/agent:
+#  -> /usr/local/bin/jenkins-agent will be invoked automatically
