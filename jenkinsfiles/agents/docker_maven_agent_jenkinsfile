@@ -1,0 +1,122 @@
+
+
+/** Global variables used inside functions **/
+// Constants
+// @Field String VAR_WITH_FIELD = 'original value2'
+// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+
+// Variables
+// varWithDynamicValue = ''
+
+
+/** Global variables used outside functions **/
+// Constants
+// String VAR_WITHOUT_FIELD = 'original value1'
+
+// Variables
+String mvnCmd = ''
+
+pipeline {
+  agent { label 'docker-agent-maven-java21-alpine' }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 10, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
+  }
+
+  stages {
+    stage('Checkout Repo') { // Or use "Pipeline sript from SCM"
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          userRemoteConfigs: [[ url: 'https://github.com/cv47522/jenkins-101.git' ]]
+        ])
+      }
+    }
+
+    stage('Build') {
+      steps {
+        script {
+          dir(MAVEN_PROJECT) {
+            // Decide which Maven command to use
+            mvnCmd = fileExists('./mvnw') ? './mvnw' : 'mvn'
+            if (mvnCmd == './mvnw') {
+              // Ensure the wrapper is executable
+              sh 'chmod +x ./mvnw'
+            }
+
+            echo "------------ Building with: ${mvnCmd} ------------"
+            sh """
+              ls -l
+              java -version
+              javac -version
+              ${mvnCmd} -v
+              ${mvnCmd} clean compile
+
+              ls -l ./target
+              tree .
+            """
+          }
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir(MAVEN_PROJECT) {
+          echo "------------ Testing ------------"
+          sh """
+            ${mvnCmd} test
+          """
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        dir(MAVEN_PROJECT) {
+          echo "------------ Packaging ------------"
+          sh """
+            ${mvnCmd} package
+            tree .
+          """
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        dir(MAVEN_PROJECT) {
+          echo '------------ Showing dependency tree ------------'
+          sh "${mvnCmd} dependency:tree"
+
+          echo "------------ Deploying ------------"
+          sh """
+            ${mvnCmd} deploy
+            ls -l ./localrepo
+            tree .
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(MAVEN_PROJECT) {
+        // `fingerprint: true`: Computes & Stores artifact checksums to track/audit exactly which binary was built and where it goes
+        archiveArtifacts artifacts: 'target/*.jar, pom.xml', fingerprint: true
+      }
+      cleanWs()
+    }
+  }
+}
