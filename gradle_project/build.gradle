@@ -2,9 +2,12 @@ plugins {
   id 'maven-publish'
 }
 
-group = 'com.example'
-version = '1.0.0'
 String centralRepo = "$rootProject.buildDir/localrepo"
+
+allprojects {
+  group = 'com.example'
+  version = '1.0.0'
+}
 
 // Apply shared configuration to all subprojects
 subprojects {
