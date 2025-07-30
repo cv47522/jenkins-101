@@ -28,6 +28,7 @@ setup(
     version=__version__,
     long_description=get_long_description(),
     author='Wan-Ting Hsieh',
+    author_email='wendy@example.com',
     # A list of all Python packages to include in the distribution, automatically found using find_packages().
     packages=find_packages(),
     # Lists the package's dependencies.
@@ -43,7 +44,6 @@ setup(
     url='https://github.com/cv47522/jenkins-101',
     # Provide metadata about the package (e.g., intended audience, programming language, and topic).
     classifiers=['Intended Audience :: Developers',
-                'License :: OSI Approved :: BSD License',
                 'Programming Language :: Python :: 3.9',
                 'Topic :: Software Development']
 )
