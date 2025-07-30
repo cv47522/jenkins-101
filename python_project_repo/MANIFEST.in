@@ -1,0 +1,2 @@
+include requirements-minimal.txt
+include README.rst
