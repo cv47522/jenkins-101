@@ -1,11 +1,11 @@
 {
   "name": "node-project",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "main": "index.js",
   "scripts": {
     "test": "jest",
     "build": "echo 'no build step'",
-    "deploy": "npm publish --dry-run",
+    "deploy": "npm publish --dry-run --tag next",
     "package": "Built-in CMD = npm pack"
   },
   "dependencies": {
