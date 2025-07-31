@@ -15,6 +15,7 @@
 
 // Variables
 String mvnCmd = ''
+String packageVersion = ''
 
 pipeline {
   agent { label 'docker-agent-maven-java21-alpine' }
@@ -29,6 +30,7 @@ pipeline {
   environment {
     PROJECT_DIR = "${WORKSPACE}"
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
+    PACKAGE_NAME = 'maven_project'
   }
 
   parameters {
@@ -49,6 +51,26 @@ pipeline {
           branches: [[ name: '*/master' ]],
           userRemoteConfigs: [[ url: 'https://github.com/cv47522/jenkins-101.git' ]]
         ])
+
+        // Or git clone only recent 5 commits:
+        // sh '''
+        //   git init .
+        //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
+        // '''
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(MAVEN_PROJECT) {
+            // Read and parse pom.xml
+            def pom = readMavenPom file: 'pom.xml'
+            packageVersion = pom.version
+            echo "Resolved ${PACKAGE_NAME} Maven Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+          }
+        }
       }
     }
 
@@ -111,8 +133,7 @@ pipeline {
           echo "------------ Deploying ------------"
           sh """
             ${mvnCmd} deploy
-            ls -l ./localrepo
-            tree .
+            tree ./localrepo
           """
         }
       }
