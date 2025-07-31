@@ -1,6 +1,6 @@
 {
-  "name": "node-project",
-  "version": "1.0.2",
+  "name": "@cv47522/node-project",
+  "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "test": "jest",
