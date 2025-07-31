@@ -29,7 +29,7 @@ pipeline {
   environment {
     PROJECT_DIR = "${WORKSPACE}"
     PYTHON_PROJECT = "${PROJECT_DIR}/python_project_repo"
-    PYTHON_PACKAGE = 'python_project'
+    PACKAGE_NAME = 'python_project'
   }
 
   parameters {
@@ -56,6 +56,18 @@ pipeline {
           git init .
           git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
         '''
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(PYTHON_PROJECT) {
+            packageVersion = sh(script: 'python setup.py --version', returnStdout: true).trim()
+            echo "Resolved ${PACKAGE_NAME} Python Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+          }
+        }
       }
     }
 
@@ -87,19 +99,12 @@ pipeline {
 
     stage('Package') {
       steps {
-        script {
-          dir(PYTHON_PROJECT) {
-            echo "------------ Packaging ------------"
-            packageVersion = sh(script: 'python setup.py --version', returnStdout: true).trim()
-            echo "Resolved ${PYTHON_PACKAGE} Python Package Version: ${packageVersion}"
-
-            sh """
-              python setup.py sdist bdist_wheel
-              ls -l dist
-            """
-
-            currentBuild.displayName = "${PYTHON_PACKAGE}-${packageVersion}/${BUILD_NUMBER}"
-          }
+        dir(PYTHON_PROJECT) {
+          echo "------------ Packaging ------------"
+          sh """
+            python setup.py sdist bdist_wheel
+            ls -l dist
+          """
         }
       }
     }
@@ -109,7 +114,7 @@ pipeline {
         dir(PYTHON_PROJECT) {
           echo "------------ Deploying ------------"
           // withCredentials(
-          //   [string(credentialsId:'pypi-token',var:'TOKEN')]
+          //   [string(credentialsId:'pypi-token', var:'TOKEN')]
           // )
           // {
           //   sh """
