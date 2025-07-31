@@ -1,5 +1,5 @@
 {
-  "name": "node_project",
+  "name": "node-project",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -11,8 +11,15 @@
   "dependencies": {
     "jest": "30.0.5"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  "keywords": [
+    "cicd",
+    "demo"
+  ],
+  "author": "Wan-Ting Hsieh",
+  "license": "MIT",
+  "description": "A demo package for Jenkins CI",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cv47522/jenkins-101.git"
+  }
 }
