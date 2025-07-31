@@ -20,6 +20,11 @@ String packageVersion = ''
 pipeline {
   agent { label 'docker-agent-maven-java21-alpine' }
 
+  triggers {
+    // Poll GitHub every 2 minutes for changes
+    pollSCM('H/2 * * * *')
+  }
+
   options {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
