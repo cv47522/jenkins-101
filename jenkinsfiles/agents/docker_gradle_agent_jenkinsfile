@@ -15,6 +15,7 @@
 
 // Variables
 String gradleCmd = ''
+String packageVersion = ''
 
 pipeline {
   agent { label 'docker-agent-gradle-java21-alpine' }
