@@ -42,7 +42,7 @@ pipeline {
 
   stages {
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
-      when { expression { CHECKOUT_REPO } }
+      when { expression { params.CHECKOUT_REPO } }
       steps {
         // Install Git in runtime or in agent Dockerfile
         // checkout([
