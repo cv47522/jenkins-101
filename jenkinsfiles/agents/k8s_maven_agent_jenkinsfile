@@ -46,6 +46,10 @@ pipeline {
     }
   }
 
+  triggers {
+    pollSCM 'H/5 * * * *'
+  }
+
   options {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
