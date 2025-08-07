@@ -24,31 +24,35 @@ pipeline {
         kind: Pod
         spec:
           serviceAccountName: jenkins-sa
+          imagePullSecrets:      # Add this to increase docker pull rate limit
+          - name: dockerhub-secret
           containers:
           # (Optional) Pin JNLP image version
           - name: jnlp
             image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
+            imagePullPolicy: IfNotPresent  # Use cached image if available
             tty: true
           - name: maven
             image: maven:3.9.11-eclipse-temurin-21-alpine
+            imagePullPolicy: IfNotPresent  # Use cached image if available
             command:
             - cat
             tty: true
             env:
             resources:
               requests:
+                memory: "256Mi" # Reduced requirements
+                cpu: "100m"
+              limits:
                 memory: "512Mi"
                 cpu: "250m"
-              limits:
-                memory: "1Gi"
-                cpu: "500m"
       '''
     }
   }
 
-  triggers {
-    pollSCM 'H/5 * * * *'
-  }
+  // triggers {
+  //   pollSCM 'H/5 * * * *'
+  // }
 
   options {
     // disableConcurrentBuilds()
