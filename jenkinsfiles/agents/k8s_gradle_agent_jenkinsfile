@@ -1,0 +1,242 @@
+/** Global variables used inside functions **/
+// Constants
+// @Field String VAR_WITH_FIELD = 'original value2'
+// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+
+// Variables
+// varWithDynamicValue = ''
+
+
+/** Global variables used outside functions **/
+// Constants
+// String VAR_WITHOUT_FIELD = 'original value1'
+
+// Variables
+String gradleCmd = 'gradle --no-daemon --console=plain'  // Always include --no-daemon
+String packageVersion = ''
+pipeline {
+  agent {
+    kubernetes {
+      defaultContainer 'gradle'
+      // yamlFile 'KubernetesPod.yaml'
+      yaml """
+        apiVersion: v1
+        kind: Pod
+        spec:
+          serviceAccountName: jenkins-sa
+          imagePullSecrets:      # Add this to increase docker pull rate limit
+          - name: dockerhub-secret
+          containers:
+          # (Optional) Pin JNLP image version
+          - name: jnlp
+            image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
+            imagePullPolicy: IfNotPresent  # Use cached image if available
+            tty: true
+          - name: gradle
+            image: gradle:8.14.3-jdk21
+            imagePullPolicy: IfNotPresent  # Use cached image if available
+            command:
+            - cat
+            tty: true
+            env:
+            # System-wide proxy settings
+            - name: http_proxy
+              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+            - name: https_proxy
+              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+            - name: no_proxy
+              value: "127.0.0.1,localhost,*.svc,*.cluster.local,10.*"
+            
+            # Complete Gradle configuration (all-in-one)
+            - name: GRADLE_OPTS
+              value: >-
+                -Dorg.gradle.daemon=false
+                -Dorg.gradle.parallel=false
+                -Dorg.gradle.caching=true
+                -Dorg.gradle.console=plain
+                -Dorg.gradle.logging.level=lifecycle
+                -Dhttp.proxyHost=${params.PROXY_IP}
+                -Dhttp.proxyPort=${params.PROXY_PORT}
+                -Dhttps.proxyHost=${params.PROXY_IP}
+                -Dhttps.proxyPort=${params.PROXY_PORT}
+                -Xmx512m
+                -XX:MaxMetaspaceSize=256m
+            resources:
+              requests:
+                memory: "512Mi" # Min. requirements otherwise OOM
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+      """
+    }
+  }
+
+  // triggers {
+  //   pollSCM 'H/5 * * * *'
+  // }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 10, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    GRADLE_PROJECT = "${PROJECT_DIR}/gradle_project"
+    PACKAGE_NAME = 'gradle_project'
+    GRADLE_PROPERTIES = "${WORKSPACE}/.gradle/gradle.properties"
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CHECKOUT_REPO',
+      defaultValue: false,
+      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+    string(
+      name: 'PROXY_IP',
+      defaultValue: '1.2.3.4',
+      description: 'Internal proxy IP to set system Gradle settings.xml'
+    )
+    string(
+      name: 'PROXY_PORT',
+      defaultValue: '8080',
+      description: 'Internal proxy port to set system Gradle settings.xml'
+    )
+  }
+  
+  stages {
+    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+      // when { expression { params.CHECKOUT_REPO } }
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          // branches: [[name: "FETCH_HEAD"]],
+          userRemoteConfigs: [[
+            url: 'https://github.com/cv47522/jenkins-101.git',
+            // credentialsId: 'my-github'
+          ]]
+        ])
+
+        // Or git clone only recent 5 commits:
+        // sh '''
+        //   git init .
+        //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
+        // '''
+      }
+    }
+
+    stage('Network Debug') {
+      steps {
+        container('gradle') {
+          sh """
+            echo "=== Network Diagnostics ==="
+            echo "DNS Resolution:"
+            nslookup plugins.gradle.org || echo "DNS resolution failed"
+            
+            echo "Proxy Environment:"
+            env | grep -i proxy || echo "No proxy environment variables"
+            
+            echo "Connectivity Test:"
+            curl -I --connect-timeout 10 https://plugins.gradle.org/ || echo "Direct connection failed"
+            curl -I --connect-timeout 10 --proxy ${params.PROXY_IP}:${params.PROXY_PORT} https://plugins.gradle.org/ || echo "Proxy connection failed"
+          """
+        }
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(GRADLE_PROJECT) {
+            // Decide which Gradle command to use
+            // gradleCmd = !fileExists('./gradlew') ?: './gradlew --no-daemon --console=plain'
+            // if (gradleCmd == './gradlew') {
+            //   // Ensure the wrapper is executable
+            //   sh 'chmod +x ./gradlew'
+            // }
+
+            // Run the properties task quietly, extract the "version" line
+            packageVersion = sh(script: "${gradleCmd} properties -q | grep '^version:' | awk '{print \$2}'",
+              returnStdout: true).trim()
+            echo "Resolved ${PACKAGE_NAME} Gradle Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+          }
+        }
+      }
+    }
+
+    stage('Build') {
+      steps {
+        script {
+          container('gradle') {
+            dir(GRADLE_PROJECT) {
+              echo "------------ Building with: ${gradleCmd} ------------"
+              sh """
+                ls -l
+                java -version
+                javac -version
+                ${gradleCmd} -v
+                ${gradleCmd} clean compileJava --info
+                ls -l ./app/build/
+              """
+            }
+          }
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir(GRADLE_PROJECT) {
+          echo "------------ Testing ------------"
+          sh """
+            ${gradleCmd} test
+          """
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        dir(GRADLE_PROJECT) {
+          echo "------------ Packaging ------------"
+          sh """
+            ${gradleCmd} jar
+            ls -l ./app/build/libs
+          """
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        dir(GRADLE_PROJECT) {
+          echo "------------ Deploying ------------"
+          sh """
+            ${gradleCmd} publish --info
+            ls -l ./build/localrepo/com/example/app
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(GRADLE_PROJECT) {
+        // For simple APP, Archive artifacts got from Gradle build library created by: $ ./gradlew build
+        // archiveArtifacts artifacts: '**/build/libs/*.jar', fingerprint: true
+
+        // For complex APP, Archive artifacts got from local Maven repo created by: $ ./gradlew build publish
+        archiveArtifacts artifacts: 'build/localrepo/**/*.jar, build/localrepo/**/*.pom', fingerprint: true
+      }
+      cleanWs()
+    }
+  }
+}
