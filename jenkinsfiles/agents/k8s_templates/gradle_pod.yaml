@@ -16,21 +16,6 @@ spec:
       command:
         - cat
       tty: true
-      env:
-        # Complete Gradle configuration (all-in-one)
-        - name: GRADLE_OPTS
-          value: >-
-            -Dorg.gradle.daemon=false
-            -Dorg.gradle.parallel=false
-            -Dorg.gradle.caching=true
-            -Dorg.gradle.console=plain
-            -Dorg.gradle.logging.level=lifecycle
-            -Dhttp.proxyHost=${env.PROXY_IP}
-            -Dhttp.proxyPort=${env.PROXY_PORT}
-            -Dhttps.proxyHost=${env.PROXY_IP}
-            -Dhttps.proxyPort=${env.PROXY_PORT}
-            -Xmx512m
-            -XX:MaxMetaspaceSize=256m
       resources:
         requests:
           memory: "512Mi" # Min. requirements otherwise OOM
