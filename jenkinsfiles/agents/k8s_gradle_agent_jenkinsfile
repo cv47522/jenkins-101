@@ -1,12 +1,3 @@
-/** Global variables used inside functions **/
-// Constants
-// @Field String VAR_WITH_FIELD = 'original value2'
-// VAR_WITHOUT_TYPE_FIELD = 'original value3'
-
-// Variables
-// varWithDynamicValue = ''
-
-
 /** Global variables used outside functions **/
 // Constants
 // String VAR_WITHOUT_FIELD = 'original value1'
@@ -18,56 +9,28 @@ pipeline {
   agent {
     kubernetes {
       defaultContainer 'gradle'
-      // yamlFile 'KubernetesPod.yaml'
+      // Method 1: Use plain Pod template text
+      // yaml """
+      //   apiVersion: v1
+      //   kind: Pod
+      //   spec:
+      //     serviceAccountName: jenkins-sa
+      //     # ... Copy/Paste full gradle_pod.yaml
+      // """
+      // Method 2: Use external YAML + merge dynamic spec
+      yamlFile 'KubernetesPod.yaml'
+      // Add dynamic system-wide proxy env vars if needed
       yaml """
-        apiVersion: v1
-        kind: Pod
         spec:
-          serviceAccountName: jenkins-sa
-          imagePullSecrets:      # Add this to increase docker pull rate limit
-          - name: dockerhub-secret
           containers:
-          # (Optional) Pin JNLP image version
-          - name: jnlp
-            image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
-            imagePullPolicy: IfNotPresent  # Use cached image if available
-            tty: true
-          - name: gradle
-            image: gradle:8.14.3-jdk21
-            imagePullPolicy: IfNotPresent  # Use cached image if available
-            command:
-            - cat
-            tty: true
+          - name: python
             env:
-            # System-wide proxy settings
-            - name: http_proxy
-              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
-            - name: https_proxy
-              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
-            - name: no_proxy
-              value: "127.0.0.1,localhost,*.svc,*.cluster.local,10.*"
-            
-            # Complete Gradle configuration (all-in-one)
-            - name: GRADLE_OPTS
-              value: >-
-                -Dorg.gradle.daemon=false
-                -Dorg.gradle.parallel=false
-                -Dorg.gradle.caching=true
-                -Dorg.gradle.console=plain
-                -Dorg.gradle.logging.level=lifecycle
-                -Dhttp.proxyHost=${params.PROXY_IP}
-                -Dhttp.proxyPort=${params.PROXY_PORT}
-                -Dhttps.proxyHost=${params.PROXY_IP}
-                -Dhttps.proxyPort=${params.PROXY_PORT}
-                -Xmx512m
-                -XX:MaxMetaspaceSize=256m
-            resources:
-              requests:
-                memory: "512Mi" # Min. requirements otherwise OOM
-                cpu: "250m"
-              limits:
-                memory: "1Gi"
-                cpu: "500m"
+            - name: HTTP_PROXY
+              value: "${env.HTTP_PROXY}"
+            - name: HTTPS_PROXY
+              value: "${env.HTTPS_PROXY}"
+            - name: NO_PROXY
+              value: "${env.NO_PROXY}"
       """
     }
   }
@@ -87,7 +50,7 @@ pipeline {
     PROJECT_DIR = "${WORKSPACE}"
     GRADLE_PROJECT = "${PROJECT_DIR}/gradle_project"
     PACKAGE_NAME = 'gradle_project'
-    GRADLE_PROPERTIES = "${WORKSPACE}/.gradle/gradle.properties"
+    // GRADLE_PROPERTIES = "${WORKSPACE}/.gradle/gradle.properties"
   }
 
   parameters {
@@ -95,16 +58,6 @@ pipeline {
       name: 'CHECKOUT_REPO',
       defaultValue: false,
       description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
-    )
-    string(
-      name: 'PROXY_IP',
-      defaultValue: '1.2.3.4',
-      description: 'Internal proxy IP to set system Gradle settings.xml'
-    )
-    string(
-      name: 'PROXY_PORT',
-      defaultValue: '8080',
-      description: 'Internal proxy port to set system Gradle settings.xml'
     )
   }
   
@@ -144,7 +97,7 @@ pipeline {
             
             echo "Connectivity Test:"
             curl -I --connect-timeout 10 https://plugins.gradle.org/ || echo "Direct connection failed"
-            curl -I --connect-timeout 10 --proxy ${params.PROXY_IP}:${params.PROXY_PORT} https://plugins.gradle.org/ || echo "Proxy connection failed"
+            curl -I --connect-timeout 10 --proxy ${env.HTTP_PROXY} https://plugins.gradle.org/ || echo "Proxy connection failed"
           """
         }
       }
