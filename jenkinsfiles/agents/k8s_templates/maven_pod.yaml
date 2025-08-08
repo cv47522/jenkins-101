@@ -16,6 +16,13 @@ spec:
       command:
         - cat
       tty: true
+      # env:
+      # - name: HTTP_PROXY
+      #   value: "${env.HTTP_PROXY}"  # Already injected from Jenkins Global Env Vars
+      # - name: HTTPS_PROXY
+      #   value: "${env.HTTPS_PROXY}"
+      # - name: NO_PROXY
+      #   value: "${env.NO_PROXY}"
       resources:
         requests:
           memory: "256Mi" # Reduced requirements
