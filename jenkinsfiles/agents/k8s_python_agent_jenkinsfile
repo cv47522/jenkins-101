@@ -1,0 +1,220 @@
+/** Global variables used inside functions **/
+// Constants
+// @Field String VAR_WITH_FIELD = 'original value2'
+// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+
+// Variables
+// varWithDynamicValue = ''
+
+
+/** Global variables used outside functions **/
+// Constants
+// String VAR_WITHOUT_FIELD = 'original value1'
+
+// Variables
+String packageVersion = ''
+
+pipeline {
+  agent {
+    kubernetes {
+      defaultContainer 'python'
+      // yamlFile 'KubernetesPod.yaml'
+      yaml """
+        apiVersion: v1
+        kind: Pod
+        spec:
+          serviceAccountName: jenkins-sa
+          imagePullSecrets:      # Add this to increase docker pull rate limit
+          - name: dockerhub-secret
+          containers:
+          # (Optional) Pin JNLP image version
+          - name: jnlp
+            image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
+            imagePullPolicy: IfNotPresent  # Use cached image if available
+            tty: true
+          - name: python
+            image: python:3.9.23-bookworm
+            imagePullPolicy: IfNotPresent  # Use cached image if available
+            command:
+            - cat
+            tty: true
+            env:
+            # System-wide proxy settings
+            - name: http_proxy
+              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+            - name: https_proxy
+              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+            - name: no_proxy
+              value: "127.0.0.1,localhost,*.svc,*.cluster.local,10.*"
+            resources:
+              requests:
+                memory: "512Mi" # Min. requirements otherwise OOM
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+      """
+    }
+  }
+
+  // triggers {
+  //   pollSCM 'H/5 * * * *'
+  // }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 10, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    PYTHON_PROJECT = "${PROJECT_DIR}/python_project_repo"
+    PACKAGE_NAME = 'python_project'
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CHECKOUT_REPO',
+      defaultValue: false,
+      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+    string(
+      name: 'PROXY_IP',
+      defaultValue: '1.2.3.4',
+      description: 'Internal proxy IP to set system Gradle settings.xml'
+    )
+    string(
+      name: 'PROXY_PORT',
+      defaultValue: '8080',
+      description: 'Internal proxy port to set system Gradle settings.xml'
+    )
+  }
+  
+  stages {
+    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+      // when { expression { params.CHECKOUT_REPO } }
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          // branches: [[name: "FETCH_HEAD"]],
+          userRemoteConfigs: [[
+            url: 'https://github.com/cv47522/jenkins-101.git',
+            // credentialsId: 'my-github'
+          ]]
+        ])
+
+        // Or git clone only recent 5 commits:
+        // sh '''
+        //   git init .
+        //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
+        // '''
+      }
+    }
+
+    stage('Network & pip Debug') {
+      steps {
+        container('python') {
+          sh """
+            echo "=== Environment Check ==="
+            python --version
+            pip --version
+            echo "Proxy Environment:"
+            env | grep -i proxy || echo "No proxy environment variables"
+
+            echo "=== Network Test ==="
+            # Test basic connectivity
+            curl -I --connect-timeout 10 --proxy ${params.PROXY_IP}:${params.PROXY_PORT} https://pypi.org/ || echo "❌ Proxy connection failed"
+            
+            echo "=== pip Proxy Test ==="
+            # Test pip with proxy
+            pip --proxy http://${params.PROXY_IP}:${params.PROXY_PORT} install --dry-run setuptools || echo "❌ pip proxy test failed"
+            
+            echo "=== DNS Test ==="
+            nslookup pypi.org || echo "❌ DNS resolution failed"
+          """
+        }
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(PYTHON_PROJECT) {
+            // sh "pip install --upgrade pip setuptools" // For >= python:3.12 images
+            packageVersion = sh(script: 'python setup.py --version', returnStdout: true).trim()
+            echo "Resolved ${PACKAGE_NAME} Python Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+          }
+        }
+      }
+    }
+
+    stage('Install Tox') {
+      steps {
+        dir(PYTHON_PROJECT) {
+          echo '------------ Installing Tox CLI ------------'
+          sh """
+            python -m venv venv
+            . ./venv/bin/activate
+            pip install tox
+          """
+        }
+      }
+    }
+    
+    stage('Install Dependencies & Run Tests') {
+      steps {
+        dir(PYTHON_PROJECT) {
+          echo '------------ Installing Dependencies & Running Tests ------------'
+          sh """
+            . ./venv/bin/activate
+            python --version
+            python -m tox -e py39,pylint39 --parallel all --parallel-live
+          """
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        dir(PYTHON_PROJECT) {
+          echo "------------ Packaging ------------"
+          sh """
+            python setup.py sdist bdist_wheel
+            ls -l dist
+          """
+        }
+      }
+    }
+
+    stage('(TODO) Deploy') {
+      steps {
+        dir(PYTHON_PROJECT) {
+          echo "------------ Deploying ------------"
+          // withCredentials(
+          //   [string(credentialsId:'pypi-token', var:'TOKEN')]
+          // )
+          // {
+          //   sh """
+          //     pip install twine
+          //     twine upload -u __token__ -p $TOKEN dist/*
+          //   """
+          // }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(PYTHON_PROJECT) {
+        archiveArtifacts artifacts: 'dist/*', fingerprint: true
+      }
+      cleanWs()
+    }
+  }
+}
