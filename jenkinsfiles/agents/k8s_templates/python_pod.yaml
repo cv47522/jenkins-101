@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: jenkins-sa
+  imagePullSecrets: # Add this to increase docker pull rate limit
+    - name: dockerhub-secret
+  containers:
+    # (Optional) Pin JNLP image version
+    - name: jnlp
+      image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
+      imagePullPolicy: IfNotPresent # Use cached image if available
+      tty: true
+    - name: python
+      image: python:3.9.23-bookworm
+      imagePullPolicy: IfNotPresent # Use cached image if available
+      command:
+        - cat
+      tty: true
+      resources:
+        requests:
+          memory: "512Mi" # Min. requirements otherwise OOM
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
