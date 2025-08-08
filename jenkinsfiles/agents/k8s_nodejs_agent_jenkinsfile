@@ -1,0 +1,329 @@
+/** Global variables used inside functions **/
+// Constants
+// @Field String VAR_WITH_FIELD = 'original value2'
+// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+
+// Variables
+// varWithDynamicValue = ''
+
+
+/** Global variables used outside functions **/
+// Constants
+// String VAR_WITHOUT_FIELD = 'original value1'
+
+// Variables
+String packageVersion = ''
+
+pipeline {
+  agent {
+    kubernetes {
+      defaultContainer 'node'
+      // yamlFile 'KubernetesPod.yaml'
+      yaml """
+        apiVersion: v1
+        kind: Pod
+        spec:
+          serviceAccountName: jenkins-sa
+          imagePullSecrets:      # Add this to increase docker pull rate limit
+          - name: dockerhub-secret
+          containers:
+          # (Optional) Pin JNLP image version
+          - name: jnlp
+            image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
+            imagePullPolicy: IfNotPresent  # Use cached image if available
+            tty: true
+          - name: node
+            image: node:24-alpine3.21
+            imagePullPolicy: IfNotPresent  # Use cached image if available
+            command:
+            - cat
+            tty: true
+            env:
+            # System-wide proxy settings
+            - name: http_proxy
+              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+            - name: https_proxy
+              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+            - name: no_proxy
+              value: "127.0.0.1,localhost,*.svc,*.cluster.local,10.*"
+            resources:
+              requests:
+                memory: "512Mi" # Min. requirements otherwise OOM
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+      """
+    }
+  }
+
+  // triggers {
+  //   pollSCM 'H/5 * * * *'
+  // }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 10, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    NODE_PROJECT = "${PROJECT_DIR}/node_project"
+    PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CHECKOUT_REPO',
+      defaultValue: false,
+      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+    string(
+      name: 'PROXY_IP',
+      defaultValue: '1.2.3.4',
+      description: 'Internal proxy IP to set system Gradle settings.xml'
+    )
+    string(
+      name: 'PROXY_PORT',
+      defaultValue: '8080',
+      description: 'Internal proxy port to set system Gradle settings.xml'
+    )
+  }
+  
+  stages {
+    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+      // when { expression { params.CHECKOUT_REPO } }
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          // branches: [[name: "FETCH_HEAD"]],
+          userRemoteConfigs: [[
+            url: 'https://github.com/cv47522/jenkins-101.git',
+            // credentialsId: 'my-github'
+          ]]
+        ])
+
+        // Or git clone only recent 5 commits:
+        // sh '''
+        //   git init .
+        //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
+        // '''
+      }
+    }
+
+    stage('Network Debug') {
+      steps {
+        container('node') {
+          sh """
+            echo "=== Network Diagnostics ==="
+            echo "DNS Resolution:"
+            nslookup registry.npmjs.org || echo "DNS resolution failed"
+            
+            echo "Proxy Environment:"
+            env | grep -i proxy || echo "No proxy environment variables"
+            
+            echo "Connectivity Test:"
+            curl -I --connect-timeout 10 https://registry.npmjs.org/ || echo "Direct connection failed"
+            curl -I --connect-timeout 10 --proxy ${params.PROXY_IP}:${params.PROXY_PORT} https://registry.npmjs.org/ || echo "Proxy connection failed"
+          """
+        }
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(NODE_PROJECT) {
+            // (Method 1) Install Jenkins plugin: Pipeline Utility Steps) Extract version from package.json
+            def packageJson = readJSON file: 'package.json'
+            packageVersion = packageJson.version
+            // (Method 2) CMD
+            // packageVersion = sh(script: '''
+            //   npm pkg get version | tr -d '"'
+            // ''', returnStdout: true).trim()
+
+            echo "Resolved ${PACKAGE_NAME} Node.js Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+          }
+        }
+      }
+    }
+
+    stage('Install Dependencies') {
+      steps {
+        dir(NODE_PROJECT) {
+          echo '------------ Installing Dependencies ------------'
+          sh """
+            node -v
+            npm -v
+            npm ci
+            npm list
+          """
+        }
+      }
+    }
+
+    stage('Build') {
+      steps {
+        dir(NODE_PROJECT) {
+          echo "------------ Building ------------"
+          sh """
+            npm run build
+          """
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir(NODE_PROJECT) {
+          echo "------------ Testing ------------"
+          sh """
+            npm test
+          """
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        script {
+          dir(NODE_PROJECT) {
+            echo "------------ Packaging ------------"
+            sh """
+              npm pack
+            """
+          }
+        }
+      }
+    }
+
+    stage('(Dry-Run) Deploy to Staging') {
+      steps {
+        dir(NODE_PROJECT) {
+          // Inject npm token into env var
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'npm-registry-token',
+              usernameVariable: 'NPM_USER',
+              passwordVariable: 'NPM_TOKEN'
+            )
+          ])
+          {
+            sh """
+              # Write a minimal .npmrc in the workspace (or to HOME)
+              cat > .npmrc <<EOF
+registry=https://registry.npmjs.org/
+//registry.npmjs.org/:_authToken=${NPM_TOKEN}
+EOF
+            """
+            echo "------------ (Dry-run) Deploying 'next' version (Beta version) ------------"
+            sh """
+              # Verify authentication
+              npm whoami
+
+              # Optionally confirm registry
+              npm config get registry
+
+              # npm run deploy
+              # Or
+              # Publishes with tag "next"
+              npm publish --dry-run --tag next
+            """
+          }
+        }
+      }
+    }
+
+    stage('(Real) Deploy to Staging') {
+      steps {
+        dir(NODE_PROJECT) {
+          echo "------------ (Real) Deploying 'next' version (Beta version) ------------"
+          sh """
+            # Verify authentication
+            npm whoami
+
+            # --access public flag is specifically needed for scoped packages
+            npm publish --tag next --access public
+
+            # Wait for registry propagation (important!)
+            echo "Waiting for registry propagation..."
+            sleep 20
+
+            # Fetch published pkg info
+             npm info "${PACKAGE_NAME}" --json
+              
+            # Check available tags
+            npm dist-tag ls "${PACKAGE_NAME}"
+          """
+        }
+      }
+    }
+
+    stage('Test in Staging Env') {
+      steps {
+        dir(NODE_PROJECT) {
+          echo "------------ Installing 'next' version (Beta version) ------------"
+          sh """
+            # Create a test directory to avoid conflicts
+            mkdir -p test-install
+            cd test-install
+            
+            # Initialize a test package.json
+            npm init -y
+            
+            # Install the next version
+            npm install ${PACKAGE_NAME}@next
+
+            # Verify installation
+            npm list "${PACKAGE_NAME}"
+            
+            # Optional: Run basic smoke test
+            node -e "console.log('Testing package:', require('${PACKAGE_NAME}'))"
+          """
+        }
+      }
+    }
+
+    stage('Deploy to Production') {
+      // when { branch 'master' }
+      steps {
+        dir(NODE_PROJECT) {
+          echo "------------ Promoting to 'latest' (Production) ------------"
+          sh """
+            # Promote the current version from next to latest
+            npm dist-tag add ${PACKAGE_NAME}@${packageVersion} latest
+
+            # Verify the tags
+            npm dist-tag ls ${PACKAGE_NAME}
+            
+            # Show final package info
+            npm info ${PACKAGE_NAME} version dist-tags
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(NODE_PROJECT) {
+        archiveArtifacts artifacts: '*.tgz', fingerprint: true
+      }
+      cleanWs()
+    }
+    success {
+      echo "✅ Deployment pipeline completed successfully!"
+      echo "📦 Package: ${PACKAGE_NAME}@${packageVersion}"
+      echo "🏷️ Next: npm install ${PACKAGE_NAME}@next"
+      echo "🚀 Latest: npm install ${PACKAGE_NAME} (after promotion)"
+    }
+    failure {
+      echo "❌ Deployment pipeline failed. Check logs above."
+    }
+  }
+}
