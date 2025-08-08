@@ -9,7 +9,7 @@ pipeline {
   agent {
     kubernetes {
       defaultContainer 'python'
-      yamlFile 'k8s_templates/python_pod.yaml' // Fetched from SCM Git repo
+      yamlFile './jenkinsfiles/agents/k8s_templates/python_pod.yaml' // Fetched from SCM Git repo
       // Add dynamic proxy env vars if needed
       yaml """
         spec:
@@ -17,11 +17,11 @@ pipeline {
           - name: python
             env:
             - name: http_proxy
-              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+              value: "${env.HTTP_PROXY}"
             - name: https_proxy
-              value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
+              value: "${env.HTTPS_PROXY}"
             - name: no_proxy
-              value: "127.0.0.1,localhost,*.svc,*.cluster.local,10.*"
+              value: "${env.NO_PROXY}"
       """
     }
   }
@@ -48,16 +48,6 @@ pipeline {
       name: 'CHECKOUT_REPO',
       defaultValue: false,
       description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
-    )
-    string(
-      name: 'PROXY_IP',
-      defaultValue: '1.2.3.4',
-      description: 'Internal proxy IP to set system Gradle settings.xml'
-    )
-    string(
-      name: 'PROXY_PORT',
-      defaultValue: '8080',
-      description: 'Internal proxy port to set system Gradle settings.xml'
     )
   }
   
@@ -96,11 +86,11 @@ pipeline {
 
             echo "=== Network Test ==="
             # Test basic connectivity
-            curl -I --connect-timeout 10 --proxy ${params.PROXY_IP}:${params.PROXY_PORT} https://pypi.org/ || echo "❌ Proxy connection failed"
+            curl -I --connect-timeout 10 --proxy ${env.HTTP_PROXY} https://pypi.org/ || echo "❌ Proxy connection failed"
             
             echo "=== pip Proxy Test ==="
             # Test pip with proxy
-            pip --proxy http://${params.PROXY_IP}:${params.PROXY_PORT} install --dry-run setuptools || echo "❌ pip proxy test failed"
+            pip --proxy ${env.HTTP_PROXY} install --dry-run setuptools || echo "❌ pip proxy test failed"
             
             echo "=== DNS Test ==="
             nslookup pypi.org || echo "❌ DNS resolution failed"
