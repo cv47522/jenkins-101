@@ -10,17 +10,17 @@ pipeline {
     kubernetes {
       defaultContainer 'python'
       yamlFile './jenkinsfiles/agents/k8s_templates/python_pod.yaml' // Fetched from SCM Git repo
-      // Add dynamic proxy env vars if needed
+      // Add dynamic system-wide proxy env vars if needed
       yaml """
         spec:
           containers:
           - name: python
             env:
-            - name: http_proxy
+            - name: HTTP_PROXY
               value: "${env.HTTP_PROXY}"
-            - name: https_proxy
+            - name: HTTPS_PROXY
               value: "${env.HTTPS_PROXY}"
-            - name: no_proxy
+            - name: NO_PROXY
               value: "${env.NO_PROXY}"
       """
     }

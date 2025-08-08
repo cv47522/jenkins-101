@@ -9,7 +9,7 @@ pipeline {
   agent {
     kubernetes {
       defaultContainer 'maven'
-      yamlFile './jenkinsfiles/agents/k8s_templates/maven_pod.yaml'
+      yamlFile './jenkinsfiles/agents/k8s_templates/maven_pod.yaml' // Fetched from SCM Git repo
     }
   }
 
@@ -41,7 +41,7 @@ pipeline {
   
   stages {
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
-      // when { expression { params.CHECKOUT_REPO } }
+      when { expression { params.CHECKOUT_REPO } }
       steps {
         // Install Git in runtime or in agent Dockerfile
         checkout([
