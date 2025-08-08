@@ -10,21 +10,6 @@ pipeline {
     kubernetes {
       defaultContainer 'python'
       yamlFile './jenkinsfiles/agents/k8s_templates/python_pod.yaml' // Fetched from SCM Git repo
-      // (Container level, not set in tox isoloated Env)
-      // (Optional as already inherited from Jenkins System Global Peroperties)
-      // Add dynamic system-wide proxy env vars to pip install tox
-      yaml """
-        spec:
-          containers:
-          - name: python
-            env:
-            - name: HTTP_PROXY
-              value: "${env.HTTP_PROXY}"
-            - name: HTTPS_PROXY
-              value: "${env.HTTPS_PROXY}"
-            - name: NO_PROXY
-              value: "${env.NO_PROXY}"
-      """
     }
   }
 
