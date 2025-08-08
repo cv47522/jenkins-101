@@ -1,0 +1,56 @@
+pipeline {
+  agent {
+    kubernetes {
+      yaml '''
+        apiVersion: v1
+        kind: Pod
+        spec:
+          serviceAccountName: jenkins-sa
+          containers:
+          # (Optional) Pin JNLP image version
+          - name: jnlp
+            image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
+            tty: true
+          - name: maven
+            image: maven:3.9.11-eclipse-temurin-21-alpine
+            command:
+            - cat
+            tty: true
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          - name: node
+            image: node:24-alpine
+            command:
+            - cat
+            tty: true
+      '''
+    }
+  }
+  
+  stages {
+    stage('Run Maven') {
+      steps {
+        container('maven') {
+          sh '''
+            mvn -version
+            echo Hello > hello.txt
+            ls -l
+          '''
+        }
+
+        container('node') {
+          sh '''
+            npm version
+            cat hello.txt
+            ls -l
+          '''
+        }
+      }
+    }
+  }
+}

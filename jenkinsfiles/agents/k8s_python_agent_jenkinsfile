@@ -10,7 +10,9 @@ pipeline {
     kubernetes {
       defaultContainer 'python'
       yamlFile './jenkinsfiles/agents/k8s_templates/python_pod.yaml' // Fetched from SCM Git repo
-      // Add dynamic system-wide proxy env vars if needed
+      // (Container level, not set in tox isoloated Env)
+      // (Optional as already inherited from Jenkins System Global Peroperties)
+      // Add dynamic system-wide proxy env vars to pip install tox
       yaml """
         spec:
           containers:
@@ -34,7 +36,7 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 10, unit: 'MINUTES')
+    timeout(time: 5, unit: 'MINUTES')
   }
 
   environment {
