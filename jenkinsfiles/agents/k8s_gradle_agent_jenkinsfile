@@ -18,7 +18,7 @@ pipeline {
       //     # ... Copy/Paste full gradle_pod.yaml
       // """
       // Method 2: Use external YAML + merge dynamic spec
-      yamlFile 'KubernetesPod.yaml'
+      yamlFile './jenkinsfiles/agents/k8s_templates/gradle_pod.yaml' // Fetched from SCM Git repo
       // Add dynamic system-wide proxy env vars if needed
       yaml """
         spec:
@@ -63,7 +63,7 @@ pipeline {
   
   stages {
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
-      // when { expression { params.CHECKOUT_REPO } }
+      when { expression { params.CHECKOUT_REPO } }
       steps {
         // Install Git in runtime or in agent Dockerfile
         checkout([
