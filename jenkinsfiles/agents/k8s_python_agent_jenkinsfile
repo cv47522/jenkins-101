@@ -1,12 +1,3 @@
-/** Global variables used inside functions **/
-// Constants
-// @Field String VAR_WITH_FIELD = 'original value2'
-// VAR_WITHOUT_TYPE_FIELD = 'original value3'
-
-// Variables
-// varWithDynamicValue = ''
-
-
 /** Global variables used outside functions **/
 // Constants
 // String VAR_WITHOUT_FIELD = 'original value1'
@@ -18,41 +9,19 @@ pipeline {
   agent {
     kubernetes {
       defaultContainer 'python'
-      // yamlFile 'KubernetesPod.yaml'
+      yamlFile 'k8s_templates/python_pod.yaml' // Fetched from SCM Git repo
+      // Add dynamic proxy env vars if needed
       yaml """
-        apiVersion: v1
-        kind: Pod
         spec:
-          serviceAccountName: jenkins-sa
-          imagePullSecrets:      # Add this to increase docker pull rate limit
-          - name: dockerhub-secret
           containers:
-          # (Optional) Pin JNLP image version
-          - name: jnlp
-            image: jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
-            imagePullPolicy: IfNotPresent  # Use cached image if available
-            tty: true
           - name: python
-            image: python:3.9.23-bookworm
-            imagePullPolicy: IfNotPresent  # Use cached image if available
-            command:
-            - cat
-            tty: true
             env:
-            # System-wide proxy settings
             - name: http_proxy
               value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
             - name: https_proxy
               value: "http://${params.PROXY_IP}:${params.PROXY_PORT}"
             - name: no_proxy
               value: "127.0.0.1,localhost,*.svc,*.cluster.local,10.*"
-            resources:
-              requests:
-                memory: "512Mi" # Min. requirements otherwise OOM
-                cpu: "250m"
-              limits:
-                memory: "1Gi"
-                cpu: "500m"
       """
     }
   }
@@ -94,7 +63,7 @@ pipeline {
   
   stages {
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
-      // when { expression { params.CHECKOUT_REPO } }
+      when { expression { params.CHECKOUT_REPO } }
       steps {
         // Install Git in runtime or in agent Dockerfile
         checkout([
