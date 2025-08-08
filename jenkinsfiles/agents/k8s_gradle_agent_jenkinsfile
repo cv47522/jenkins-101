@@ -19,18 +19,26 @@ pipeline {
       // """
       // Method 2: Use external YAML + merge dynamic spec
       yamlFile './jenkinsfiles/agents/k8s_templates/gradle_pod.yaml' // Fetched from SCM Git repo
-      // Add dynamic system-wide proxy env vars if needed
+      // Add dynamic Gradle proxy env vars if needed
       yaml """
         spec:
           containers:
-          - name: python
+          - name: gradle
             env:
-            - name: HTTP_PROXY
-              value: "${env.HTTP_PROXY}"
-            - name: HTTPS_PROXY
-              value: "${env.HTTPS_PROXY}"
-            - name: NO_PROXY
-              value: "${env.NO_PROXY}"
+              # Complete Gradle configuration (all-in-one)
+              - name: GRADLE_OPTS
+                value: >-
+                  -Dorg.gradle.daemon=false
+                  -Dorg.gradle.parallel=false
+                  -Dorg.gradle.caching=true
+                  -Dorg.gradle.console=plain
+                  -Dorg.gradle.logging.level=lifecycle
+                  -Dhttp.proxyHost=${env.PROXY_IP}
+                  -Dhttp.proxyPort=${env.PROXY_PORT}
+                  -Dhttps.proxyHost=${env.PROXY_IP}
+                  -Dhttps.proxyPort=${env.PROXY_PORT}
+                  -Xmx512m
+                  -XX:MaxMetaspaceSize=256m
       """
     }
   }
