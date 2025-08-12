@@ -108,7 +108,7 @@ pipeline {
             echo "✅ Settings written successfully!"
             echo "👤 Running as user: $(id)"
             echo "📁 Directory permissions:"
-            ls -la ${MAVEN_CACHE_DIR}
+            ls -la "${MAVEN_CACHE_DIR}"
             
             echo "🔍 Testing Maven proxy:"
             mvn help:effective-settings | head -20
