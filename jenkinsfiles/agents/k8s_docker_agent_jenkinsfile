@@ -21,7 +21,8 @@ pipeline {
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
     PACKAGE_NAME = 'maven_project'
     // Write settings.xml directly to emptyDir location instead of Jenkins workspace
-    MAVEN_USER_HOME = '/home/maven' // Non-root path
+    // MAVEN_USER_HOME = '/root/maven' // (Default) root path
+    MAVEN_USER_HOME = '/tmp/maven' // Non-root path
     MAVEN_CACHE_DIR = "${MAVEN_USER_HOME}/.m2"
     MAVEN_SETTINGS_XML = "${MAVEN_CACHE_DIR}/settings.xml"
     DOCKER_REGISTRY = 'docker.io'
@@ -106,9 +107,9 @@ pipeline {
           // Verify settings are applied
           sh """
             echo "✅ Settings written successfully!"
-            echo "👤 Running as user: $(id)"
+            echo "👤 Running as user: \$(id)"
             echo "📁 Directory permissions:"
-            ls -la "${MAVEN_CACHE_DIR}"
+            ls -la ${MAVEN_CACHE_DIR}
             
             echo "🔍 Testing Maven proxy:"
             mvn help:effective-settings | head -20
