@@ -110,9 +110,9 @@ pipeline {
             echo "👤 Running as user: \$(id)"
             echo "📁 Directory permissions:"
             ls -la ${MAVEN_CACHE_DIR}
-            
+
             echo "🔍 Testing Maven proxy:"
-            mvn help:effective-settings | head -20
+            mvn help:effective-settings -s ${MAVEN_SETTINGS_XML} | head -20
           """
         }
       }
@@ -141,7 +141,7 @@ pipeline {
               java -version
               javac -version
 
-              mvn clean package
+              mvn clean package -s ${MAVEN_SETTINGS_XML}
               ls -la target/
 
               echo '📊 Cache status:'
