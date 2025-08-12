@@ -141,11 +141,19 @@ pipeline {
       steps {
         container('docker-client') {
           dir(MAVEN_PROJECT) {
-            sh """
-              docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-              docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
-              docker images | grep ${IMAGE_NAME}
-            """
+            // Login and push to DockerHub
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )]) {
+              sh """
+                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                docker images | grep ${IMAGE_NAME}
+              """
+            }
           }
         }
       }
