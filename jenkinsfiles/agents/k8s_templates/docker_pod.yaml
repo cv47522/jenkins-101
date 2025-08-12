@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: build-pod
+spec:
+  containers:
+    # Docker daemon container (privileged)
+    - name: docker-daemon
+      image: docker:28.3.3-dind
+      imagePullPolicy: IfNotPresent # Use cached image if available
+      securityContext:
+        privileged: true
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: "" # Disable TLS for simplicity within pod
+      volumeMounts:
+        - name: docker-sock # ← Shared volume
+          mountPath: /var/run
+        - name: docker-storage # ← Performance-critical
+          mounthPath: /var/lib/docker
+
+    # Docker client CLI container
+    - name: docker-client
+      image: docker:28.3.3-cli
+      imagePullPolicy: IfNotPresent
+      command: [cat]
+      tty: true
+      env:
+        - nmae: DOCKER_HOST
+          value: unix:///var/run/docker.sock
+      volumeMounts:
+        - name: docker-sock # ← Shared volume
+          value: /var/run
+
+    # Build tools container
+    - name: maven
+      image: maven:3.9.11-eclipse-temurin-21-alpine
+      imagePullPolicy: IfNotPresent
+      command: [cat]
+      tty: true
+      volumeMounts:
+        - name: maven-cached # ← Caching benefits
+          mounthPath: /root/.m2
+      resources:
+        requests:
+          memory: "256Mi" # Reduced requirements
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "250m"
+
+  volumes:
+    - name: docker-sock # ← Critical shared storage
+      emptyDir: {} # ← Sharing requirement
+    - name: docker-storage
+      emptyDir: # ← Performance + persistence
+        sizeLimit: 10Gi # Limit storage usage
+        medium: Memory # Use RAM disk for extreme speed
+    - name: maven-cached
+      emptyDir: # ← Caching + performance
+        sizeLimit: 2Gi # Cache size limit
+        # medium: ""  # Default: node disk (balanced)
