@@ -20,11 +20,8 @@ pipeline {
     PROJECT_DIR = "${WORKSPACE}"
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
     PACKAGE_NAME = 'maven_project'
-    // Write settings.xml directly to emptyDir location instead of Jenkins workspace
-    MAVEN_USER_HOME = '/root' // (Default) root path
-    // MAVEN_USER_HOME = '/tmp/maven' // (Not working) Non-root path
-    MAVEN_CACHE_DIR = "${MAVEN_USER_HOME}/.m2"
-    MAVEN_SETTINGS_XML = "${MAVEN_CACHE_DIR}/settings.xml"
+    // Write settings.xml directly to Jenkins workspace
+    MAVEN_SETTINGS_XML = "${PROJECT_DIR}/settings.xml"
     DOCKER_REGISTRY = 'docker.io'
     IMAGE_NAME = 'cv47522/my-java-app'
     IMAGE_TAG = "${BUILD_NUMBER}"
@@ -70,10 +67,6 @@ pipeline {
     stage('Configure Maven Proxy') {
       steps {
         container('maven') {
-          // Write settings.xml directly to emptyDir location
-          // Create .m2 directory if it doesn't exist
-          sh "mkdir -p ${MAVEN_CACHE_DIR}"
-
           writeFile file: MAVEN_SETTINGS_XML, text: """
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
@@ -98,9 +91,6 @@ pipeline {
       <nonProxyHosts>127.0.0.1|localhost|*.svc|*.cluster.local|10.*</nonProxyHosts>
     </proxy>
   </proxies>
-
-  <!-- ✅ Point to emptyDir location -->
-  <localRepository>${MAVEN_USER_HOME}/.m2/repository</localRepository>
 </settings>
 """.trim()
 
@@ -108,8 +98,6 @@ pipeline {
           sh """
             echo "✅ Settings written successfully!"
             echo "👤 Running as user: \$(id)"
-            echo "📁 Directory permissions:"
-            ls -la ${MAVEN_CACHE_DIR}
 
             echo "🔍 Testing Maven proxy:"
             mvn help:effective-settings -s ${MAVEN_SETTINGS_XML} | head -20
@@ -143,10 +131,6 @@ pipeline {
 
               mvn clean package -s ${MAVEN_SETTINGS_XML}
               ls -la target/
-
-              echo '📊 Cache status:'
-              du -sh ${MAVEN_CACHE_DIR}repository
-              ls -la ${MAVEN_CACHE_DIR}
             """
           }
         }

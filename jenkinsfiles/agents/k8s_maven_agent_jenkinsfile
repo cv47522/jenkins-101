@@ -28,7 +28,9 @@ pipeline {
     PROJECT_DIR = "${WORKSPACE}"
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
     PACKAGE_NAME = 'maven_project'
-    MAVEN_SETTINGS_XML = "${WORKSPACE}/.m2/settings.xml"
+    // MAVEN_SETTINGS_XML = "${WORKSPACE}/.m2/settings.xml"
+    // Or Write settings.xml directly to Jenkins workspace
+    MAVEN_SETTINGS_XML = "${MPROJECT_DIR}/settings.xml"
   }
 
   parameters {
