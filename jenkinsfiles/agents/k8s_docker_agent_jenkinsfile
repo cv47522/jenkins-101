@@ -1,0 +1,106 @@
+pipeline {
+  agent {
+    kubernetes {
+      yamlFile './jenkinsfiles/agents/k8s_templates/docker_pod.yaml' // Fetched from SCM Git repo
+    }
+  }
+
+  // triggers {
+  //   pollSCM 'H/5 * * * *'
+  // }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 5, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
+    PACKAGE_NAME = 'maven_project'
+    MAVEN_SETTINGS_XML = "${WORKSPACE}/.m2/settings.xml"
+    DOCKER_REGISTRY = 'docker.io'
+    IMAGE_NAME = 'cv47522/my-java-app'
+    IMAGE_TAG = "${BUILD_NUMBER}"
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CHECKOUT_REPO',
+      defaultValue: false,
+      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+  }
+
+  stages {
+    stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+      when { expression { params.CHECKOUT_REPO } }
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          // branches: [[name: "FETCH_HEAD"]],
+          userRemoteConfigs: [[
+            url: 'https://github.com/cv47522/jenkins-101.git',
+            // credentialsId: 'my-github'
+          ]]
+        ])
+
+        // Or git clone only recent 5 commits:
+        // sh '''
+        //   git init .
+        //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
+        // '''
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(MAVEN_PROJECT) {
+            // Read and parse pom.xml
+            def pom = readMavenPom file: 'pom.xml'
+            packageVersion = pom.version
+            echo "Resolved ${PACKAGE_NAME} Maven Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+          }
+        }
+      }
+    }
+
+    stage('Build & Test & Package Application') {
+      steps {
+        container('maven') {
+          dir(MAVEN_PROJECT) {
+            sh """
+              java -version
+              javac -version
+
+              mvn clean package
+              ls -la target/
+            """
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(MAVEN_PROJECT) {
+        // `fingerprint: true`: Computes & Stores artifact checksums to track/audit exactly which binary was built and where it goes
+        archiveArtifacts artifacts: 'target/*.jar, pom.xml', fingerprint: true
+      }
+      cleanWs()
+    }
+  }
+}

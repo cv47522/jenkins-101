@@ -51,6 +51,12 @@ pipeline {
   }
   
   stages {
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    //   steps {
+    //     checkout scm
+    //   }
+    // }
+
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
       when { expression { params.CHECKOUT_REPO } }
       steps {
@@ -130,7 +136,7 @@ systemProp.https.proxyPort=${env.PROXY_PORT}
       }
     }
 
-    stage('Build') {
+    stage('Build Application') {
       steps {
         script {
           container('gradle') {
