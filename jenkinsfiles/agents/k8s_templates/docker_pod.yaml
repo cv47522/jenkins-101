@@ -42,15 +42,15 @@ spec:
       imagePullPolicy: IfNotPresent
       command: ["cat"]
       tty: true
-      # securityContext:
-      #   runAsUser: 0 # Run as root - fixes all permission issues
+      securityContext:
+        runAsUser: 0 # Run as root - fixes all permission issues
       volumeMounts:
         - name: maven-cached # ← Caching benefits
-          # mountPath: /root/.m2  # Needs root permission
-          mountPath: /tmp/maven/.m2 # (Non-root) User-writable location
-      env:
-        - name: MAVEN_USER_HOME
-          value: /tmp/maven # Tell Maven where to find .m2
+          mountPath: /root/.m2 # Needs root permission
+          # mountPath: /tmp/maven/.m2 # (Non-root, not working in Jenkinsfile) User-writable location
+      # env:
+      #   - name: MAVEN_USER_HOME
+      #     value: /tmp/maven # Tell Maven where to find .m2
       resources:
         requests:
           memory: "256Mi" # Reduced requirements
