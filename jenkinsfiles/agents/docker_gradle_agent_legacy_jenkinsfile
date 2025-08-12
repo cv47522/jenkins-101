@@ -14,7 +14,7 @@
 // String VAR_WITHOUT_FIELD = 'original value1'
 
 // Variables
-String gradleCmd = ''
+String gradleCmd = 'gradle --no-daemon --console=plain'  // Always include --no-daemon
 String packageVersion = ''
 
 pipeline {
@@ -29,7 +29,7 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 10, unit: 'MINUTES')
+    timeout(time: 5, unit: 'MINUTES')
   }
 
   environment {
@@ -47,6 +47,12 @@ pipeline {
   }
 
   stages {
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    //   steps {
+    //     checkout scm
+    //   }
+    // }
+
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
       when { expression { params.CHECKOUT_REPO } }
       steps {
@@ -70,8 +76,8 @@ pipeline {
         script {
           dir(GRADLE_PROJECT) {
             // Decide which Gradle command to use
-            gradleCmd = fileExists('./gradlew') ? './gradlew' : 'gradle'
-            if (gradleCmd == './gradlew') {
+            gradleCmd = !fileExists('./gradlew') ?: './gradlew --no-daemon --console=plain'
+            if (gradleCmd == './gradlew --no-daemon --console=plain') {
               // Ensure the wrapper is executable
               sh 'chmod +x ./gradlew'
             }
@@ -86,7 +92,7 @@ pipeline {
       }
     }
 
-    stage('Build') {
+    stage('Build Application') {
       steps {
         dir(GRADLE_PROJECT) {
           echo "------------ Building with: ${gradleCmd} ------------"

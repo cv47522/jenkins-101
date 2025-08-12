@@ -1,0 +1,60 @@
+pipeline {
+  agent none
+ 
+  stages {
+    stage ('Build Node.js Front-end') {
+      // TODO: (Manage Jenkins > Clouds > docker > Configure > Docker Agent templates) Add a new Agent template with:
+      // Label: docker-agent-nodejs-alpine / Docker Image: sps-docker-candidates.repo.cci.nokia.net/jenkins/agent:nodejs-alpine
+      // Dockerfile: Dockerfile_jenkins_agent_nodejs_alpine
+      agent { label 'docker-agent-nodejs-alpine' }
+      steps {
+        sh 'node --version'
+      }
+    }
+
+    stage ('Build Python Back-end') {
+      // TODO: (Manage Jenkins > Clouds > docker > Configure > Docker Agent templates) Add a new Agent template with:
+      // Label: docker-agent-python3-alpine / Docker Image: sps-docker-candidates.repo.cci.nokia.net/jenkins/agents:python3-alpine
+      // Dockerfile: Dockerfile_jenkins_agent_nodejs_alpine
+      agent { label 'docker-agent-python3-alpine' }
+      steps {
+        sh 'python --version'
+      }
+    }
+
+    stage ('Build Java Back-end') {
+      // TODO: (Manage Jenkins > Clouds > docker > Configure > Docker Agent templates) Add a new Agent template with:
+      // Label: docker-agent-java21-alpine / Docker Image: registry1-docker-io.repo.cci.nokia.net/jenkins/agent:alpine-jdk21
+      agent { label 'docker-agent-java21-alpine' }
+      steps {
+        sh 'java -version'
+      }
+    }
+
+    stage ('Build Gradle Back-end') {
+      // TODO: (Manage Jenkins > Clouds > docker > Configure > Docker Agent templates) Add a new Agent template with:
+      // Label: docker-agent-gradle-java21-alpine / Docker Image: registry1-docker-io.repo.cci.nokia.net/gradle:8.14.3-jdk21
+      agent { label 'docker-agent-gradle-java21-alpine' }
+      steps {
+        sh '''
+          java -version
+          gradle --version
+        '''
+        // Or use `./gradlew --version` committed in a Gradle project repo
+      }
+    }
+
+    stage ('Build Maven Back-end') {
+      // TODO: (Manage Jenkins > Clouds > docker > Configure > Docker Agent templates) Add a new Agent template with:
+      // Label: docker-agent-maven-java21-alpine / Docker Image: registry1-docker-io.repo.cci.nokia.net/maven:3.9.11-eclipse-temurin-21-alpine
+      agent { label 'docker-agent-maven-java21-alpine' }
+      steps {
+        sh '''
+          java -version
+          mvn  --version
+        '''
+        // Or use `./mvn --version` committed in a Maven project repo
+      }
+    }
+  }
+}

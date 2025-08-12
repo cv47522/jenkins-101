@@ -19,16 +19,16 @@ String packageVersion = ''
 pipeline {
   agent { label 'docker-agent-python3-alpine' }
 
-  triggers {
-    // Poll GitHub every 2 minutes for changes
-    pollSCM('H/2 * * * *')
-  }
+  // triggers {
+  //   // Poll GitHub every 2 minutes for changes
+  //   pollSCM('H/2 * * * *')
+  // }
 
   options {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 10, unit: 'MINUTES')
+    timeout(time: 5, unit: 'MINUTES')
   }
 
   environment {
@@ -46,6 +46,12 @@ pipeline {
   }
 
   stages {
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    //   steps {
+    //     checkout scm
+    //   }
+    // }
+
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
       when { expression { params.CHECKOUT_REPO } }
       steps {
