@@ -21,7 +21,9 @@ pipeline {
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
     PACKAGE_NAME = 'maven_project'
     // Write settings.xml directly to emptyDir location instead of Jenkins workspace
-    MAVEN_SETTINGS_XML = '/root/.m2/settings.xml'
+    MAVEN_USER_HOME = '/home/maven' // Non-root path
+    MAVEN_CACHE_DIR = "${MAVEN_USER_HOME}/.m2"
+    MAVEN_SETTINGS_XML = "${MAVEN_CACHE_DIR}/settings.xml"
     DOCKER_REGISTRY = 'docker.io'
     IMAGE_NAME = 'cv47522/my-java-app'
     IMAGE_TAG = "${BUILD_NUMBER}"
@@ -68,6 +70,9 @@ pipeline {
       steps {
         container('maven') {
           // Write settings.xml directly to emptyDir location
+          // Create .m2 directory if it doesn't exist
+          sh "mkdir -p ${MAVEN_CACHE_DIR}"
+
           writeFile file: MAVEN_SETTINGS_XML, text: """
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
@@ -92,20 +97,22 @@ pipeline {
       <nonProxyHosts>127.0.0.1|localhost|*.svc|*.cluster.local|10.*</nonProxyHosts>
     </proxy>
   </proxies>
+
+  <!-- ✅ Point to emptyDir location -->
+  <localRepository>${MAVEN_USER_HOME}/.m2/repository</localRepository>
 </settings>
 """.trim()
 
           // Verify settings are applied
-          sh '''
-            echo "📋 Maven settings location:"
-            ls -la /root/.m2/settings.xml
-
-            echo "🔍 Testing Maven configuration:"
+          sh """
+            echo "✅ Settings written successfully!"
+            echo "👤 Running as user: $(id)"
+            echo "📁 Directory permissions:"
+            ls -la ${MAVEN_CACHE_DIR}
+            
+            echo "🔍 Testing Maven proxy:"
             mvn help:effective-settings | head -20
-
-            echo "🌐 Testing repository access through proxy:"
-            mvn help:system -q | head -10 || echo "⚠️ Proxy test failed"
-          '''
+          """
         }
       }
     }
@@ -137,8 +144,8 @@ pipeline {
               ls -la target/
 
               echo '📊 Cache status:'
-              du -sh /root/.m2/repository
-              ls -la /root/.m2/
+              du -sh ${MAVEN_CACHE_DIR}repository
+              ls -la ${MAVEN_CACHE_DIR}
             """
           }
         }
