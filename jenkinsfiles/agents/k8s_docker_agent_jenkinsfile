@@ -92,38 +92,38 @@ pipeline {
         }
       }
     }
-  }
 
-  stage('Build Docker Image') {
-    steps {
-      container('docker-client') {
-        dir(MAVEN_PROJECT) {
-          sh """
-            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
-            docker images | grep ${IMAGE_NAME}
-          """
+    stage('Build Docker Image') {
+      steps {
+        container('docker-client') {
+          dir(MAVEN_PROJECT) {
+            sh """
+              docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+              docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+              docker images | grep ${IMAGE_NAME}
+            """
+          }
         }
       }
     }
-  }
 
-  stage('Build Docker Image') {
-    steps {
-      script {
-        container('docker-client') {
-          // Login and push to DockerHub
-          withCredentials([usernamePassword(
-              credentialsId: 'dockerhub-credentials',
-              usernameVariable: 'DOCKER_USERNAME',
-              passwordVariable: 'DOCKER_PASSWORD'
-          )]) {
-            sh """
-              echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
-              docker push ${IMAGE_NAME}:${IMAGE_TAG}
-              docker push ${IMAGE_NAME}:latest
-              docker logout
-          """
+    stage('Push to DockerHub') {
+      steps {
+        script {
+          container('docker-client') {
+            // Login and push to DockerHub
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )]) {
+              sh """
+                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                docker push ${IMAGE_NAME}:latest
+                docker logout
+            """
+            }
           }
         }
       }
@@ -145,7 +145,6 @@ pipeline {
       """
       cleanWs()
     }
-
     success {
       echo "✅ Successfully built and pushed ${IMAGE_NAME}:${IMAGE_TAG}"
     }
