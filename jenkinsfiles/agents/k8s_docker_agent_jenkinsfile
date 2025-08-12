@@ -20,7 +20,8 @@ pipeline {
     PROJECT_DIR = "${WORKSPACE}"
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
     PACKAGE_NAME = 'maven_project'
-    MAVEN_SETTINGS_XML = "${WORKSPACE}/.m2/settings.xml"
+    // Write settings.xml directly to emptyDir location instead of Jenkins workspace
+    MAVEN_SETTINGS_XML = '/root/.m2/settings.xml'
     DOCKER_REGISTRY = 'docker.io'
     IMAGE_NAME = 'cv47522/my-java-app'
     IMAGE_TAG = "${BUILD_NUMBER}"
@@ -63,6 +64,52 @@ pipeline {
       }
     }
 
+    stage('Configure Maven Proxy') {
+      steps {
+        container('maven') {
+          // Write settings.xml directly to emptyDir location
+          writeFile file: MAVEN_SETTINGS_XML, text: """
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 
+                              http://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <proxies>
+    <proxy>
+      <id>https-proxy</id>
+      <active>true</active>
+      <protocol>https</protocol>
+      <host>${env.PROXY_IP}</host>
+      <port>${env.PROXY_PORT}</port>
+      <nonProxyHosts>127.0.0.1|localhost|*.svc|*.cluster.local|10.*</nonProxyHosts>
+    </proxy>
+    <proxy>
+      <id>http-proxy</id>
+      <active>true</active>
+      <protocol>http</protocol>
+      <host>${env.PROXY_IP}</host>
+      <port>${env.PROXY_PORT}</port>
+      <nonProxyHosts>127.0.0.1|localhost|*.svc|*.cluster.local|10.*</nonProxyHosts>
+    </proxy>
+  </proxies>
+</settings>
+""".trim()
+
+          // Verify settings are applied
+          sh '''
+            echo "📋 Maven settings location:"
+            ls -la /root/.m2/settings.xml
+
+            echo "🔍 Testing Maven configuration:"
+            mvn help:effective-settings | head -20
+
+            echo "🌐 Testing repository access through proxy:"
+            mvn help:system -q | head -10 || echo "⚠️ Proxy test failed"
+          '''
+        }
+      }
+    }
+
     stage('Get Package Version') {
       steps {
         script {
@@ -82,11 +129,16 @@ pipeline {
         container('maven') {
           dir(MAVEN_PROJECT) {
             sh """
+              echo '🏗️ Building with proxy and cached dependencies...'
               java -version
               javac -version
 
               mvn clean package
               ls -la target/
+
+              echo '📊 Cache status:'
+              du -sh /root/.m2/repository
+              ls -la /root/.m2/
             """
           }
         }
