@@ -4,6 +4,9 @@ metadata:
   labels:
     jenkins: build-pod
 spec:
+  serviceAccountName: jenkins-sa
+  imagePullSecrets: # Add this to increase docker pull rate limit
+    - name: dockerhub-secret
   containers:
     # Docker daemon container (privileged)
     - name: docker-daemon

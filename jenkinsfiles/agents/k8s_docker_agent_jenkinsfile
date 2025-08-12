@@ -35,11 +35,11 @@ pipeline {
   }
 
   stages {
-    stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
-      steps {
-        checkout scm
-      }
-    }
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    //   steps {
+    //     checkout scm
+    //   }
+    // }
 
     stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
       when { expression { params.CHECKOUT_REPO } }
@@ -94,13 +94,63 @@ pipeline {
     }
   }
 
+  stage('Build Docker Image') {
+    steps {
+      container('docker-client') {
+        dir(MAVEN_PROJECT) {
+          sh """
+            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+            docker images | grep ${IMAGE_NAME}
+          """
+        }
+      }
+    }
+  }
+
+  stage('Build Docker Image') {
+    steps {
+      script {
+        container('docker-client') {
+          // Login and push to DockerHub
+          withCredentials([usernamePassword(
+              credentialsId: 'dockerhub-credentials',
+              usernameVariable: 'DOCKER_USERNAME',
+              passwordVariable: 'DOCKER_PASSWORD'
+          )]) {
+            sh """
+              echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+              docker push ${IMAGE_NAME}:${IMAGE_TAG}
+              docker push ${IMAGE_NAME}:latest
+              docker logout
+          """
+          }
+        }
+      }
+    }
+  }
+
   post {
     always {
       dir(MAVEN_PROJECT) {
         // `fingerprint: true`: Computes & Stores artifact checksums to track/audit exactly which binary was built and where it goes
         archiveArtifacts artifacts: 'target/*.jar, pom.xml', fingerprint: true
       }
+
+      // Cleanup local images to save space
+      sh """
+        docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true
+        docker rmi ${IMAGE_NAME}:latest || true
+        docker system prune -f
+      """
       cleanWs()
+    }
+
+    success {
+      echo "✅ Successfully built and pushed ${IMAGE_NAME}:${IMAGE_TAG}"
+    }
+    failure {
+      echo "❌ Pipeline failed. Check logs for details."
     }
   }
 }
