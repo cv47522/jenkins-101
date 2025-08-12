@@ -15,33 +15,33 @@ spec:
         - name: DOCKER_TLS_CERTDIR
           value: "" # Disable TLS for simplicity within pod
       volumeMounts:
-        - name: docker-sock # ← Shared volume
+        - name: docker-sock # Shared with client(s)
           mountPath: /var/run
         - name: docker-storage # ← Performance-critical
-          mounthPath: /var/lib/docker
+          mountPath: /var/lib/docker
 
     # Docker client CLI container
     - name: docker-client
       image: docker:28.3.3-cli
       imagePullPolicy: IfNotPresent
-      command: [cat]
+      command: ["cat"]
       tty: true
       env:
-        - nmae: DOCKER_HOST
+        - name: DOCKER_HOST
           value: unix:///var/run/docker.sock
       volumeMounts:
-        - name: docker-sock # ← Shared volume
-          value: /var/run
+        - name: docker-sock # Shared with client(s)
+          mountPath: /var/run
 
     # Build tools container
     - name: maven
       image: maven:3.9.11-eclipse-temurin-21-alpine
       imagePullPolicy: IfNotPresent
-      command: [cat]
+      command: ["cat"]
       tty: true
       volumeMounts:
         - name: maven-cached # ← Caching benefits
-          mounthPath: /root/.m2
+          mountPath: /root/.m2
       resources:
         requests:
           memory: "256Mi" # Reduced requirements
@@ -52,11 +52,11 @@ spec:
 
   volumes:
     - name: docker-sock # ← Critical shared storage
-      emptyDir: {} # ← Sharing requirement
+      emptyDir: {} # Shared tmp FS for the socket file
     - name: docker-storage
       emptyDir: # ← Performance + persistence
-        sizeLimit: 10Gi # Limit storage usage
-        medium: Memory # Use RAM disk for extreme speed
+        sizeLimit: 3Gi # Limit storage usage
+        medium: Memory # (Optional) Use RAM disk for extreme speed
     - name: maven-cached
       emptyDir: # ← Caching + performance
         sizeLimit: 2Gi # Cache size limit
