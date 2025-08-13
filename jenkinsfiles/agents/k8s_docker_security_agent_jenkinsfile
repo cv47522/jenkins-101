@@ -114,17 +114,17 @@ pipeline {
     stage('Prepare Docker Context') {
       steps {
         container('docker-client') {
-        sh '''
-          # Setup buildx for multi-architecture builds
-          docker buildx create --use --name multiarch-builder || true
-          docker buildx inspect --bootstrap
+          sh '''
+            # Setup buildx for multi-architecture builds
+            docker buildx create --use --name multiarch-builder || true
+            docker buildx inspect --bootstrap
 
-          # Show available platforms
-          docker buildx ls
-        '''
+            # Show available platforms
+            docker buildx ls
+          '''
+        }
       }
     }
-  }
 
     stage('Build Multi-Arch Images') {
       parallel {
@@ -283,7 +283,7 @@ pipeline {
       //     docker system prune -f
       //     docker buildx rm multiarch-builder || true
       //   """
-      }
+      // }
       cleanWs()
     }
     success {
