@@ -1,0 +1,296 @@
+pipeline {
+  agent {
+    kubernetes {
+      // Each build gets clean environment
+      yamlFile './jenkinsfiles/agents/k8s_templates/docker_security_pod.yaml' // Fetched from SCM Git repo
+    }
+  }
+
+  // triggers {
+  //   pollSCM 'H/5 * * * *'
+  // }
+
+  options {
+    // disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
+    timestamps()
+    timeout(time: 5, unit: 'MINUTES')
+  }
+
+  environment {
+    PROJECT_DIR = "${WORKSPACE}"
+    NODE_PROJECT = "${PROJECT_DIR}/node_project"
+    PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
+    DOCKER_REGISTRY = 'docker.io'
+    IMAGE_NAME = 'cv47522/my-node-app'
+    IMAGE_TAG = "${BUILD_NUMBER}"
+    GIT_COMMIT = "${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
+    BUILD_DATE = new Date().format('yyyy-MM-dd')
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CHECKOUT_REPO',
+      defaultValue: false,
+      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+  }
+
+  stages {
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    //   steps {
+    //     checkout scm
+    //   }
+    // }
+
+    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+      when { expression { params.CHECKOUT_REPO } }
+      steps {
+        // Install Git in runtime or in agent Dockerfile
+        checkout([
+          $class: 'GitSCM',
+          branches: [[ name: '*/master' ]],
+          // branches: [[name: "FETCH_HEAD"]],
+          userRemoteConfigs: [[
+            url: 'https://github.com/cv47522/jenkins-101.git',
+            // credentialsId: 'my-github'
+          ]]
+        ])
+
+        // Or git clone only recent 5 commits:
+        // sh '''
+        //   git init .
+        //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
+        // '''
+      }
+    }
+
+    stage('Get Package Version') {
+      steps {
+        script {
+          dir(NODE_PROJECT) {
+            // (Method 1) Install Jenkins plugin: Pipeline Utility Steps) Extract version from package.json
+            def packageJson = readJSON file: 'package.json'
+            packageVersion = packageJson.version
+            // (Method 2) CMD
+            // packageVersion = sh(script: '''
+            //   npm pkg get version | tr -d '"'
+            // ''', returnStdout: true).trim()
+
+            echo "Resolved ${PACKAGE_NAME} Node.js Package Version: ${packageVersion}"
+            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+
+            echo "🚀 Building ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "📅 Build Date: ${BUILD_DATE}"
+            echo "🔍 Git Commit: ${GIT_COMMIT}"
+          }
+        }
+      }
+    }
+
+    stage('Build & Test & Package Application') {
+      steps {
+        container('node') {
+          dir(NODE_PROJECT) {
+            sh """
+              echo "📦 Installing dependencies..."
+              npm ci --only=production
+
+              echo "🧪 Running tests..."
+              npm test
+
+              echo "🏗️ Building application..."
+              npm run build
+
+              echo "📊 Packaging application..."
+              npm pack
+              ls -la | grep tgz
+            """
+          }
+        }
+      }
+    }
+
+    stage('Prepare Docker Context') {
+      steps {
+        container('docker-client') {
+        sh '''
+          # Setup buildx for multi-architecture builds
+          docker buildx create --use --name multiarch-builder || true
+          docker buildx inspect --bootstrap
+
+          # Show available platforms
+          docker buildx ls
+        '''
+      }
+    }
+  }
+
+    stage('Build Multi-Arch Images') {
+      parallel {
+        stage('AMD64 Build') {
+          steps {
+            container('docker-client') {
+              dir(NODE_PROJECT) {
+                // Login and push to DockerHub
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                  sh """
+                    echo "🏗️ Building AMD64 image..."
+                    echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+                    docker buildx build \
+                      -platform linux/amd64 \
+                      --tag  ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                      --build-arg BUILD_DATE="${BUILD_DATE}" \
+                      --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+                      --load .
+                  """
+                }
+              }
+            }
+          }
+        }
+
+      stage('ARM64 Build') {
+          steps {
+            container('docker-client') {
+              dir(NODE_PROJECT) {
+                // Login and push to DockerHub
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                  sh """
+                    echo "🏗️ Building ARM64 image..."
+                    echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+                    docker buildx build \
+                      -platform linux/arm64 \
+                      --tag  ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                      --build-arg BUILD_DATE="${BUILD_DATE}" \
+                      --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+                      --load .
+                  """
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('Security Scanning') {
+      parallel {
+        stage('Scan AMD64') {
+          steps {
+            container('trivy') {
+              sh """
+                echo "🔍 Scanning AMD64 image for vulnerabilities..."
+                trivy image ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                  --exit-code 0 --severity HIGH,CRITICAL --format table 
+              """
+            }
+          }
+        }
+
+        stage('Scan ARM64') {
+          steps {
+            container('trivy') {
+              sh """
+                echo "🔍 Scanning ARM64 image for vulnerabilities..."
+                trivy image ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                  --exit-code 0 --severity HIGH,CRITICAL --format table 
+              """
+            }
+          }
+        }
+      }
+    }
+
+    stage('Create Multi-Arch Manifest & Push to DockerHub') {
+      steps {
+        script {
+          container('docker-client') {
+            // Login and push to DockerHub
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )]) {
+              sh """
+                echo "🔐 Logging into DockerHub..."
+                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+
+                echo "📤 Pushing individual architecture images..."
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}-amd64
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}-arm64
+
+                echo "📋 Creating and pushing multi-arch manifest..."
+                docker manifest create ${IMAGE_NAME}:${IMAGE_TAG} \
+                    ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    ${IMAGE_NAME}:${IMAGE_TAG}-arm64
+
+                docker manifest create ${IMAGE_NAME}:latest \
+                    ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    ${IMAGE_NAME}:${IMAGE_TAG}-arm64
+
+                docker manifest push ${IMAGE_NAME}:${IMAGE_TAG}
+                docker manifest push ${IMAGE_NAME}:latest
+
+                echo "🚀 Multi-arch image published successfully!"
+                docker logout
+            """
+            }
+          }
+        }
+      }
+    }
+
+    stage('Generate Build Report') {
+      steps {
+        container('docker-client') {
+          sh """
+            echo "📊 Build Report"
+            echo "=============="
+            echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Platforms: linux/amd64, linux/arm64"
+            echo "Build Date: ${BUILD_DATE}"
+            echo "Git Commit: ${GIT_COMMIT}"
+            echo "Jenkins Build: ${BUILD_NUMBER}"
+
+            # Show image information
+            docker images | grep ${IMAGE_NAME} || true
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      dir(NODE_PROJECT) {
+        archiveArtifacts artifacts: '*.tgz', fingerprint: true
+      }
+      // container('docker-client') {
+      //   // (Optioanl, images already removed after each Pod dies in each build) Cleanup local images to save space
+      //   sh """
+      //     echo "🧹 Cleaning up..."
+      //     docker rmi ${IMAGE_NAME}:${IMAGE_TAG}-amd64 || true
+      //     docker rmi ${IMAGE_NAME}:${IMAGE_TAG}-arm64 || true
+      //     docker system prune -f
+      //     docker buildx rm multiarch-builder || true
+      //   """
+      }
+      cleanWs()
+    }
+    success {
+      echo "✅ Successfully built and pushed ${IMAGE_NAME}:${IMAGE_TAG}"
+    }
+    failure {
+      echo "❌ Pipeline failed. Check logs for details."
+    }
+  }
+}

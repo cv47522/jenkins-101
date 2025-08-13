@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: advanced-build-pod
+spec:
+  serviceAccountName: jenkins-sa
+  imagePullSecrets: # Add this to increase docker pull rate limit
+    - name: dockerhub-secret
+  containers:
+    # Docker daemon container (privileged)
+    - name: docker-daemon
+      image: docker:28.3.3-dind
+      imagePullPolicy: IfNotPresent # Use cached image if available
+      securityContext:
+        privileged: true
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: "" # Disable TLS for simplicity within pod
+      volumeMounts:
+        - name: docker-sock # Shared with client(s)
+          mountPath: /var/run
+        - name: docker-storage # ← Performance-critical
+          mountPath: /var/lib/docker
+
+    # Docker client CLI container
+    - name: docker-client
+      image: docker:28.3.3-cli
+      imagePullPolicy: IfNotPresent
+      command: ["cat"]
+      tty: true
+      env:
+        - name: DOCKER_HOST
+          value: unix:///var/run/docker.sock
+      volumeMounts:
+        - name: docker-sock # Shared with client(s)
+          mountPath: /var/run
+
+    # Security scanning with Trivy
+    - name: trivy
+      image: aquasec/trivy:0.65.0
+      command: ["cat"]
+      tty: true
+      volumeMounts:
+        - name: docker-sock # Shared with client(s)
+          mountPath: /var/run
+
+    # Application build tools container
+    - name: node
+      image: node:24-alpine3.21
+      imagePullPolicy: IfNotPresent
+      command: ["cat"]
+      tty: true
+      resources:
+        requests:
+          memory: "512Mi" # Min. requirements otherwise OOM
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+
+  volumes:
+    - name: docker-sock # ← Critical shared storage
+      emptyDir: {} # Shared tmp FS for the socket file
+    - name: docker-storage
+      emptyDir: # ← Performance + persistence
+        sizeLimit: 2Gi # Limit storage usage
+        medium: Memory # (Optional) Use RAM disk for extreme speed
+        # medium: ""  # Default: Node disk (balanced)
