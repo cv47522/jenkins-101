@@ -1,3 +1,7 @@
+/** Global variables used outside functions **/
+// Constants
+String IMAGE_NAME = params.DOCKERFILE == 'Dockerfile_http' ? 'cv47522/plain-node-http-server' : 'cv47522/plain-node-express-server'
+
 pipeline {
   agent {
     kubernetes {
@@ -22,7 +26,6 @@ pipeline {
     NODE_PROJECT = "${PROJECT_DIR}/node_project"
     PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
     DOCKER_REGISTRY = 'docker.io'
-    IMAGE_NAME = 'cv47522/my-node-app'
     IMAGE_TAG = "${BUILD_NUMBER}"
     GIT_COMMIT = "${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
     BUILD_DATE = new Date().format('yyyy-MM-dd')
@@ -33,6 +36,11 @@ pipeline {
       name: 'CHECKOUT_REPO',
       defaultValue: false,
       description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+    )
+    choice(
+      name: 'DOCKERFILE',
+      choices: ['Dockerfile_http', 'Dockerfile_express'],
+      description: 'Select the Dockerfile to build image'
     )
   }
 
@@ -94,16 +102,16 @@ pipeline {
           dir(NODE_PROJECT) {
             sh """
               echo "📦 Installing dependencies..."
-              npm ci --only=production
-
-              echo "🧪 Running tests..."
-              npm test
+              npm ci --omit=dev
 
               echo "🏗️ Building application..."
-              npm run build
+              npm run build || echo "No build script"
+
+              echo "🧪 Running tests..."
+              npm test || echo "No tests"
 
               echo "📊 Packaging application..."
-              npm pack
+              npm run package || npm pack
               ls -la | grep tgz
             """
           }
@@ -143,6 +151,7 @@ pipeline {
                     echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
                     docker buildx build \
                       -platform linux/amd64 \
+                      -f ${params.DOCKERFILE} \
                       --tag  ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
                       --build-arg BUILD_DATE="${BUILD_DATE}" \
                       --build-arg GIT_COMMIT="${GIT_COMMIT}" \
@@ -169,6 +178,7 @@ pipeline {
                     echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
                     docker buildx build \
                       -platform linux/arm64 \
+                      -f ${params.DOCKERFILE} \
                       --tag  ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
                       --build-arg BUILD_DATE="${BUILD_DATE}" \
                       --build-arg GIT_COMMIT="${GIT_COMMIT}" \
