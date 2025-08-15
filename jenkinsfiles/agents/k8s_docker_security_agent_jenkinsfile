@@ -197,11 +197,16 @@ pipeline {
         stage('Scan AMD64') {
           steps {
             container('trivy') {
-              sh """
-                echo "🔍 Scanning AMD64 image for vulnerabilities..."
-                trivy image ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                  --exit-code 0 --severity HIGH,CRITICAL --format table 
-              """
+              dir(NODE_PROJECT) {
+                sh """
+                  echo "🔍 Scanning AMD64 image for vulnerabilities..."
+                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    --exit-code 0 --severity HIGH,CRITICAL --format table
+                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    --exit-code 0 --format template --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
+                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-amd64.html
+                """
+              }
             }
           }
         }
@@ -209,11 +214,16 @@ pipeline {
         stage('Scan ARM64') {
           steps {
             container('trivy') {
-              sh """
-                echo "🔍 Scanning ARM64 image for vulnerabilities..."
-                trivy image ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
-                  --exit-code 0 --severity HIGH,CRITICAL --format table 
-              """
+              dir(NODE_PROJECT) {
+                sh """
+                  echo "🔍 Scanning ARM64 image for vulnerabilities..."
+                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                    --exit-code 0 --severity HIGH,CRITICAL --format table
+                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                    --exit-code 0 --format template --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
+                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-arm64.html
+                """
+              }
             }
           }
         }
@@ -282,7 +292,7 @@ pipeline {
   post {
     always {
       dir(NODE_PROJECT) {
-        archiveArtifacts artifacts: '*.tgz', fingerprint: true
+        archiveArtifacts artifacts: '*.tgz,*.html', fingerprint: true
       }
       // container('docker-client') {
       //   // (Optioanl, images already removed after each Pod dies in each build) Cleanup local images to save space
