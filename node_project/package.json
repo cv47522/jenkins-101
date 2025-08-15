@@ -11,7 +11,7 @@
     "url": "git+https://github.com/cv47522/jenkins-101.git"
   },
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=22.0.0",
     "npm": ">=10.0.0"
   },
   "scripts": {

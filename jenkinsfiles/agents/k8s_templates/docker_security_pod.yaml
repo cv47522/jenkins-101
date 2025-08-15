@@ -47,7 +47,7 @@ spec:
 
     # Application build tools container
     - name: node
-      image: node:24-alpine3.21
+      image: node:22-alpine3.21
       imagePullPolicy: IfNotPresent
       command: ["cat"]
       tty: true

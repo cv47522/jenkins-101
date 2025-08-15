@@ -150,7 +150,7 @@ pipeline {
                     echo "🏗️ Building AMD64 image..."
                     echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
                     docker buildx build \
-                      -platform linux/amd64 \
+                      --platform linux/amd64 \
                       -f ${params.DOCKERFILE} \
                       --tag  ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
                       --build-arg BUILD_DATE="${BUILD_DATE}" \
@@ -177,7 +177,7 @@ pipeline {
                     echo "🏗️ Building ARM64 image..."
                     echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
                     docker buildx build \
-                      -platform linux/arm64 \
+                      --platform linux/arm64 \
                       -f ${params.DOCKERFILE} \
                       --tag  ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
                       --build-arg BUILD_DATE="${BUILD_DATE}" \
