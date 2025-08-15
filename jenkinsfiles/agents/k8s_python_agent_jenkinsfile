@@ -34,18 +34,18 @@ pipeline {
     booleanParam(
       name: 'CHECKOUT_REPO',
       defaultValue: false,
-      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+      description: 'Enable extra stage to checkout repo if not using "Pipeline script from SCM" config'
     )
   }
   
   stages {
-    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline script from SCM"
     //   steps {
     //     checkout scm
     //   }
     // }
 
-    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+    stage('Manual Repo Checkout') { // Or use "Pipeline script from SCM"
       when { expression { params.CHECKOUT_REPO } }
       steps {
         // Install Git in runtime or in agent Dockerfile

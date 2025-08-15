@@ -1,15 +1,8 @@
-/** Global variables used outside functions **/
-// Constants
-// String VAR_WITHOUT_FIELD = 'original value1'
-
-// Variables
-String mvnCmd = 'mvn'
-String packageVersion = ''
 pipeline {
   agent {
     kubernetes {
-      defaultContainer 'maven'
-      yamlFile './jenkinsfiles/agents/k8s_templates/maven_pod.yaml' // Fetched from SCM Git repo
+      // Each build gets clean environment
+      yamlFile './jenkinsfiles/agents/k8s_templates/docker_maven_pod.yaml' // Fetched from SCM Git repo
     }
   }
 
@@ -28,9 +21,11 @@ pipeline {
     PROJECT_DIR = "${WORKSPACE}"
     MAVEN_PROJECT = "${PROJECT_DIR}/maven_project"
     PACKAGE_NAME = 'maven_project'
-    // MAVEN_SETTINGS_XML = "${WORKSPACE}/.m2/settings.xml"
-    // Or Write settings.xml directly to Jenkins workspace
-    MAVEN_SETTINGS_XML = "${MPROJECT_DIR}/settings.xml"
+    // Write settings.xml directly to Jenkins workspace
+    MAVEN_SETTINGS_XML = "${PROJECT_DIR}/settings.xml"
+    DOCKER_REGISTRY = 'docker.io'
+    IMAGE_NAME = 'cv47522/my-java-app'
+    IMAGE_TAG = "${BUILD_NUMBER}"
   }
 
   parameters {
@@ -40,7 +35,7 @@ pipeline {
       description: 'Enable extra stage to checkout repo if not using "Pipeline script from SCM" config'
     )
   }
-  
+
   stages {
     // stage('Declarative: Checkout SCM') { // Already added by "Pipeline script from SCM"
     //   steps {
@@ -67,25 +62,6 @@ pipeline {
         //   git init .
         //   git pull --depth=5 https://github.com/cv47522/jenkins-101.git master
         // '''
-      }
-    }
-
-    stage('Network Debug') {
-      steps {
-        container('maven') {
-          sh """
-            echo "=== Network Diagnostics ==="
-            echo "DNS Resolution:"
-            nslookup repo.maven.apache.org || echo "DNS resolution failed"
-            
-            echo "Proxy Environment:"
-            env | grep -i proxy || echo "No proxy environment variables"
-            
-            echo "Connectivity Test:"
-            curl -I --connect-timeout 10 http://repo.maven.apache.org/maven2/ || echo "Direct connection failed"
-            curl -I --connect-timeout 10 --proxy ${env.HTTP_PROXY} http://repo.maven.apache.org/maven2/ || echo "Proxy connection failed"
-          """
-        }
       }
     }
 
@@ -119,14 +95,14 @@ pipeline {
 </settings>
 """.trim()
 
-          // Tell Maven where to find that settings.xml
-          withEnv(["MAVEN_CONFIG=${WORKSPACE}/.m2"]) {
-            echo "Wrote ${MAVEN_SETTINGS_XML}"
-            echo '(With "MAVEN_CONFIG" env var) Testing Maven can reach repository with proxy'
-            sh 'mvn help:system | head -20 || echo "Maven proxy test failed"'
-          }
-          echo '(Without "MAVEN_CONFIG" env var) Testing Maven can reach repository with proxy'
-          sh"mvn help:system -s ${MAVEN_SETTINGS_XML} | head -20 || echo 'Maven proxy test failed'"
+          // Verify settings are applied
+          sh """
+            echo "✅ Settings written successfully!"
+            echo "👤 Running as user: \$(id)"
+
+            echo "🔍 Testing Maven proxy:"
+            mvn help:effective-settings -s ${MAVEN_SETTINGS_XML} | head -20
+          """
         }
       }
     }
@@ -145,30 +121,38 @@ pipeline {
       }
     }
 
-    stage('Build Application') {
+    stage('Build & Test & Package Application') {
       steps {
-        script {
-          container('maven') {
-            dir(MAVEN_PROJECT) {
-              // ('./mvnw' needs proxy & doesn't read from settings.xml!) Decide which Maven command to use
-              // mvnCmd = fileExists('./mvnw') ? './mvnw' : 'mvn'
-              // if (mvnCmd == './mvnw') {
-              //   // Ensure the wrapper is executable
-              //   sh 'chmod +x ./mvnw'
-              // }
+        container('maven') {
+          dir(MAVEN_PROJECT) {
+            sh """
+              echo '🏗️ Building with proxy and cached dependencies...'
+              java -version
+              javac -version
 
-              echo "------------ Building with: ${mvnCmd} ------------"
+              mvn clean package -s ${MAVEN_SETTINGS_XML}
+              ls -la target/
+            """
+          }
+        }
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        container('docker-client') {
+          dir(MAVEN_PROJECT) {
+            // Login and push to DockerHub
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )]) {
               sh """
-                ls -l
-                java -version
-                javac -version
-                ${mvnCmd} -v
-
-                echo 'Updating mvn command to use proxy seetings'
-                ${mvnCmd} clean compile -s ${MAVEN_SETTINGS_XML}
-
-                ls -l ./target
-                tree .
+                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                docker images | grep ${IMAGE_NAME}
               """
             }
           }
@@ -176,40 +160,24 @@ pipeline {
       }
     }
 
-    stage('Test') {
+    stage('Push to DockerHub') {
       steps {
-        dir(MAVEN_PROJECT) {
-          echo "------------ Testing ------------"
-          sh """
-            ${mvnCmd} test -s ${MAVEN_SETTINGS_XML}
-          """
-        }
-      }
-    }
-
-    stage('Package') {
-      steps {
-        dir(MAVEN_PROJECT) {
-          echo "------------ Packaging ------------"
-          sh """
-            ${mvnCmd} package -s ${MAVEN_SETTINGS_XML}
-            tree .
-          """
-        }
-      }
-    }
-
-    stage('Deploy') {
-      steps {
-        dir(MAVEN_PROJECT) {
-          echo '------------ Showing dependency tree ------------'
-          sh "${mvnCmd} dependency:tree -s ${MAVEN_SETTINGS_XML}"
-
-          echo "------------ Deploying ------------"
-          sh """
-            ${mvnCmd} deploy -s ${MAVEN_SETTINGS_XML}
-            tree ./localrepo
-          """
+        script {
+          container('docker-client') {
+            // Login and push to DockerHub
+            withCredentials([usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKER_USERNAME',
+                passwordVariable: 'DOCKER_PASSWORD'
+            )]) {
+              sh """
+                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                docker push ${IMAGE_NAME}:latest
+                docker logout
+            """
+            }
+          }
         }
       }
     }
@@ -221,7 +189,21 @@ pipeline {
         // `fingerprint: true`: Computes & Stores artifact checksums to track/audit exactly which binary was built and where it goes
         archiveArtifacts artifacts: 'target/*.jar, pom.xml', fingerprint: true
       }
+      // container('docker-client') {
+      //   // (Optioanl, images already removed after each Pod dies in each build) Cleanup local images to save space
+      //   sh """
+      //     docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true
+      //     docker rmi ${IMAGE_NAME}:latest || true
+      //     docker system prune -f
+      //   """
+      // }
       cleanWs()
+    }
+    success {
+      echo "✅ Successfully built and pushed ${IMAGE_NAME}:${IMAGE_TAG}"
+    }
+    failure {
+      echo "❌ Pipeline failed. Check logs for details."
     }
   }
 }

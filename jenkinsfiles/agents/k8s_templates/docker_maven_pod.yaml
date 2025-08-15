@@ -36,7 +36,7 @@ spec:
         - name: docker-sock # Shared with client(s)
           mountPath: /var/run
 
-    # Build tools container
+    # Application build tools container
     - name: maven
       image: maven:3.9.11-eclipse-temurin-21-alpine
       imagePullPolicy: IfNotPresent
@@ -66,9 +66,9 @@ spec:
       emptyDir: {} # Shared tmp FS for the socket file
     - name: docker-storage
       emptyDir: # ← Performance + persistence
-        sizeLimit: 3Gi # Limit storage usage
+        sizeLimit: 2Gi # Limit storage usage
         medium: Memory # (Optional) Use RAM disk for extreme speed
     - name: maven-cached
       emptyDir: # ← Caching + performance
         sizeLimit: 2Gi # Cache size limit
-        # medium: ""  # Default: node disk (balanced)
+        # medium: ""  # Default: Node disk (balanced)

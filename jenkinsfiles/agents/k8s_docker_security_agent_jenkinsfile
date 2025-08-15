@@ -9,7 +9,7 @@ pipeline {
   agent {
     kubernetes {
       // Each build gets clean environment
-      yamlFile './jenkinsfiles/agents/k8s_templates/docker_security_pod.yaml' // Fetched from SCM Git repo
+      yamlFile './jenkinsfiles/agents/k8s_templates/docker_node_security_pod.yaml' // Fetched from SCM Git repo
     }
   }
 
@@ -198,17 +198,21 @@ pipeline {
     stage('Security Scanning') {
       parallel {
         stage('Scan AMD64') {
+          environment {
+            ARCH = 'amd64'
+            TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache/${ARCH}"
+          }
           steps {
             container('trivy') {
               dir(NODE_PROJECT) {
                 sh """
                   echo "🔍 Scanning AMD64 image for vulnerabilities..."
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    --exit-code 0 --severity HIGH,CRITICAL --format template \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
+                    --exit-code 0 --format template \
                     --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-amd64.html
+                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-${ARCH}.html
                 """
               }
             }
@@ -216,17 +220,21 @@ pipeline {
         }
 
         stage('Scan ARM64') {
+          environment {
+            ARCH = 'arm64'
+            TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache/${ARCH}"
+          }
           steps {
             container('trivy') {
               dir(NODE_PROJECT) {
                 sh """
                   echo "🔍 Scanning ARM64 image for vulnerabilities..."
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    --exit-code 0 --severity HIGH,CRITICAL --format template \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
+                    --exit-code 0 --format template \
                     --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-amd64.html
+                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-${ARCH}.html
                 """
               }
             }
