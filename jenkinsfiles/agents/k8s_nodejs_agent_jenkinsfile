@@ -172,6 +172,7 @@ pipeline {
               # Write a minimal .npmrc in the workspace (or to HOME)
               cat > .npmrc <<EOF
 registry=https://registry.npmjs.org/
+always-auth=true
 //registry.npmjs.org/:_authToken=${NPM_TOKEN}
 EOF
             """
@@ -210,7 +211,7 @@ EOF
 
             # Fetch published pkg info
              npm info "${PACKAGE_NAME}" --json
-              
+
             # Check available tags
             npm dist-tag ls "${PACKAGE_NAME}"
           """
@@ -226,16 +227,16 @@ EOF
             # Create a test directory to avoid conflicts
             mkdir -p test-install
             cd test-install
-            
+
             # Initialize a test package.json
             npm init -y
-            
+
             # Install the next version
             npm install ${PACKAGE_NAME}@next
 
             # Verify installation
             npm list "${PACKAGE_NAME}"
-            
+
             # Optional: Run basic smoke test
             node -e "console.log('Testing package:', require('${PACKAGE_NAME}'))"
           """
