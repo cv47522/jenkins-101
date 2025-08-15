@@ -27,7 +27,7 @@ pipeline {
   environment {
     PROJECTDIR = "${WORKSPACE}"
     NODE_PROJECT = "${PROJECTDIR}/node_project"
-    PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
+    PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name (Should be the same as package.json!)
   }
 
   parameters {

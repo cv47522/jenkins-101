@@ -1,5 +1,5 @@
 {
-  "name": "node-project",
+  "name": "@cv47522/node-project",
   "version": "2.0.1",
   "description": "Plain Node.js with HTTP and Express examples",
   "type": "module",
