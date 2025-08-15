@@ -1,6 +1,9 @@
 /** Global variables used outside functions **/
 // Constants
-String IMAGE_NAME = params.DOCKERFILE == 'Dockerfile_http' ? 'cv47522/plain-node-http-server' : 'cv47522/plain-node-express-server'
+String IMAGE_NAME = params.DOCKERFILE == 'Dockerfile_http' ? 'plain-node-http-server' : 'plain-node-express-server'
+String FULL_IMAGE_NAME = "cv47522/${IMAGE_NAME}"
+// Variables
+String packageVersion = ''
 
 pipeline {
   agent {
@@ -35,7 +38,7 @@ pipeline {
     booleanParam(
       name: 'CHECKOUT_REPO',
       defaultValue: false,
-      description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
+      description: 'Enable extra stage to checkout repo if not using "Pipeline script from SCM" config'
     )
     choice(
       name: 'DOCKERFILE',
@@ -45,13 +48,13 @@ pipeline {
   }
 
   stages {
-    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
+    // stage('Declarative: Checkout SCM') { // Already added by "Pipeline script from SCM"
     //   steps {
     //     checkout scm
     //   }
     // }
 
-    stage('Manual Repo Checkout') { // Or use "Pipeline sript from SCM"
+    stage('Manual Repo Checkout') { // Or use "Pipeline script from SCM"
       when { expression { params.CHECKOUT_REPO } }
       steps {
         // Install Git in runtime or in agent Dockerfile
@@ -88,7 +91,7 @@ pipeline {
             echo "Resolved ${PACKAGE_NAME} Node.js Package Version: ${packageVersion}"
             currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
 
-            echo "🚀 Building ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "🚀 Building ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
             echo "📅 Build Date: ${BUILD_DATE}"
             echo "🔍 Git Commit: ${GIT_COMMIT}"
           }
@@ -152,7 +155,7 @@ pipeline {
                     docker buildx build \
                       --platform linux/amd64 \
                       -f ${params.DOCKERFILE} \
-                      --tag  ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                      --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
                       --build-arg BUILD_DATE="${BUILD_DATE}" \
                       --build-arg GIT_COMMIT="${GIT_COMMIT}" \
                       --load .
@@ -179,7 +182,7 @@ pipeline {
                     docker buildx build \
                       --platform linux/arm64 \
                       -f ${params.DOCKERFILE} \
-                      --tag  ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                      --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 \
                       --build-arg BUILD_DATE="${BUILD_DATE}" \
                       --build-arg GIT_COMMIT="${GIT_COMMIT}" \
                       --load .
@@ -200,10 +203,11 @@ pipeline {
               dir(NODE_PROJECT) {
                 sh """
                   echo "🔍 Scanning AMD64 image for vulnerabilities..."
-                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
-                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    --exit-code 0 --format template --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    --exit-code 0 --severity HIGH,CRITICAL --format template \
+                    --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
                     -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-amd64.html
                 """
               }
@@ -217,11 +221,12 @@ pipeline {
               dir(NODE_PROJECT) {
                 sh """
                   echo "🔍 Scanning ARM64 image for vulnerabilities..."
-                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
-                  trivy image ${IMAGE_NAME}:${IMAGE_TAG}-arm64 \
-                    --exit-code 0 --format template --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-arm64.html
+                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    --exit-code 0 --severity HIGH,CRITICAL --format template \
+                    --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
+                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-amd64.html
                 """
               }
             }
@@ -245,20 +250,20 @@ pipeline {
                 echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
 
                 echo "📤 Pushing individual architecture images..."
-                docker push ${IMAGE_NAME}:${IMAGE_TAG}-amd64
-                docker push ${IMAGE_NAME}:${IMAGE_TAG}-arm64
+                docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64
+                docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
 
                 echo "📋 Creating and pushing multi-arch manifest..."
-                docker manifest create ${IMAGE_NAME}:${IMAGE_TAG} \
-                    ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    ${IMAGE_NAME}:${IMAGE_TAG}-arm64
+                docker manifest create ${FULL_IMAGE_NAME}:${IMAGE_TAG} \
+                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
 
-                docker manifest create ${IMAGE_NAME}:latest \
-                    ${IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    ${IMAGE_NAME}:${IMAGE_TAG}-arm64
+                docker manifest create ${FULL_IMAGE_NAME}:latest \
+                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
 
-                docker manifest push ${IMAGE_NAME}:${IMAGE_TAG}
-                docker manifest push ${IMAGE_NAME}:latest
+                docker manifest push ${FULL_IMAGE_NAME}:${IMAGE_TAG}
+                docker manifest push ${FULL_IMAGE_NAME}:latest
 
                 echo "🚀 Multi-arch image published successfully!"
                 docker logout
@@ -275,14 +280,14 @@ pipeline {
           sh """
             echo "📊 Build Report"
             echo "=============="
-            echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Image: ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
             echo "Platforms: linux/amd64, linux/arm64"
             echo "Build Date: ${BUILD_DATE}"
             echo "Git Commit: ${GIT_COMMIT}"
             echo "Jenkins Build: ${BUILD_NUMBER}"
 
             # Show image information
-            docker images | grep ${IMAGE_NAME} || true
+            docker images | grep ${FULL_IMAGE_NAME} || true
           """
         }
       }
@@ -298,8 +303,8 @@ pipeline {
       //   // (Optioanl, images already removed after each Pod dies in each build) Cleanup local images to save space
       //   sh """
       //     echo "🧹 Cleaning up..."
-      //     docker rmi ${IMAGE_NAME}:${IMAGE_TAG}-amd64 || true
-      //     docker rmi ${IMAGE_NAME}:${IMAGE_TAG}-arm64 || true
+      //     docker rmi ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 || true
+      //     docker rmi ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 || true
       //     docker system prune -f
       //     docker buildx rm multiarch-builder || true
       //   """
@@ -307,7 +312,7 @@ pipeline {
       cleanWs()
     }
     success {
-      echo "✅ Successfully built and pushed ${IMAGE_NAME}:${IMAGE_TAG}"
+      echo "✅ Successfully built and pushed ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
     }
     failure {
       echo "❌ Pipeline failed. Check logs for details."
