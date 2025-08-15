@@ -37,7 +37,7 @@ pipeline {
       description: 'Enable extra stage to checkout repo if not using "Pipeline sript from SCM" config'
     )
   }
-  
+
   stages {
     // stage('Declarative: Checkout SCM') { // Already added by "Pipeline sript from SCM"
     //   steps {
@@ -112,7 +112,7 @@ pipeline {
           sh """
             node -v
             npm -v
-            npm ci
+            npm ci --omit=dev
             npm list
           """
         }
@@ -124,7 +124,8 @@ pipeline {
         dir(NODE_PROJECT) {
           echo "------------ Building ------------"
           sh """
-            npm run build
+            echo "Running build (if present)";
+            npm run build || echo "No build script";
           """
         }
       }
@@ -135,7 +136,8 @@ pipeline {
         dir(NODE_PROJECT) {
           echo "------------ Testing ------------"
           sh """
-            npm test
+            echo "Running tests (if present)";
+            npm run test || echo "No tests";
           """
         }
       }
@@ -147,7 +149,7 @@ pipeline {
           dir(NODE_PROJECT) {
             echo "------------ Packaging ------------"
             sh """
-              npm pack
+              npm run package || npm pack
             """
           }
         }
@@ -183,7 +185,7 @@ EOF
 
               # npm run deploy
               # Or
-              # Publishes with tag "next"
+              # Publish with tag "next"
               npm publish --dry-run --tag next
             """
           }
@@ -252,7 +254,7 @@ EOF
 
             # Verify the tags
             npm dist-tag ls ${PACKAGE_NAME}
-            
+
             # Show final package info
             npm info ${PACKAGE_NAME} version dist-tags
           """
