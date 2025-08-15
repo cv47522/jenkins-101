@@ -1,0 +1,42 @@
+# TODO: Run $ docker buildx build --no-cache --progress=plain -f ./Dockerfile_express -t plain-node-express-server:1.0 .
+FROM node:24-alpine AS base
+
+# (Optional, not needed in Jenkins build) Set company internal proxy settings for plugin install
+ARG PROXY=http://10.158.100.1:8080
+ARG NOPROXY='localhost,127.0.0.1,10.0.2.15,localaddress,.localdomain.com,.alcatel-lucent.com,.nokia.net,.nsn-rdnet.net'
+
+ENV HTTP_PROXY=$PROXY \
+    HTTPS_PROXY=$PROXY \
+    NO_PROXY=$NOPROXY \
+    http_proxy=$PROXY \
+    https_proxy=$PROXY \
+    no_proxy=$NOPROXY
+
+WORKDIR /app
+
+COPY . .
+
+###  Installing dependencies
+# Without package-lock.json, run:
+# RUN npm install --no-optional --verbose --omit=dev && npm cache clean --force
+# With package-lock.json, run:
+RUN npm ci --no-optional --verbose --omit=dev && npm cache clean --force
+
+# nodejs → name of the group to create.
+# -g 1001 → set the group’s GID (group ID) to 1001.
+# -S → create a system group (meant for services; not a normal login group).
+# appuser → name of the user to create.
+# -u 1001 → set the user's UID to 1001.
+# -S → create a system user (service account: no password, non-interactive defaults).
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S appuser -u 1001 && \
+    chown -R appuser:nodejs /app
+
+USER appuser
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/health').then(res=>res.json()).then(console.log).catch(()=>process.exit(1))"
+
+CMD ["npm", "run", "start:express"]

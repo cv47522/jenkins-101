@@ -1,0 +1,17 @@
+{
+  "extends": "./test-data.json",
+  "configurations": {
+    "ci": {
+      "PORT": 3001,
+      "NODE_ENV": "test",
+      "LOG_LEVEL": "silent",
+      "TIMEOUT": 5000
+    }
+  },
+  "performanceTestData": {
+    "concurrentRequests": {
+      "count": 50,
+      "expectedSuccessRate": 0.95
+    }
+  }
+}

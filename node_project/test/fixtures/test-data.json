@@ -1,0 +1,431 @@
+{
+  "healthChecks": {
+    "http": {
+      "status": "ok",
+      "server": "built-in-http",
+      "nodeVersion": "v24.5.0",
+      "uptime": 42,
+      "environment": "test"
+    },
+    "express": {
+      "status": "ok",
+      "server": "express",
+      "nodeVersion": "v24.5.0",
+      "uptime": 42,
+      "environment": "test"
+    }
+  },
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "role": "admin",
+      "active": true,
+      "createdAt": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Bob Smith",
+      "email": "bob@example.com",
+      "role": "user",
+      "active": true,
+      "createdAt": "2024-01-16T14:22:00Z"
+    },
+    {
+      "id": 3,
+      "name": "Charlie Brown",
+      "email": "charlie@example.com",
+      "role": "user",
+      "active": false,
+      "createdAt": "2024-01-17T09:15:00Z"
+    }
+  ],
+  "posts": [
+    {
+      "id": 1,
+      "title": "Getting Started with Node.js v24",
+      "content": "Node.js v24 brings exciting new features including...",
+      "authorId": 1,
+      "tags": ["nodejs", "javascript", "backend"],
+      "published": true,
+      "createdAt": "2024-01-20T08:00:00Z",
+      "updatedAt": "2024-01-20T08:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Express vs Built-in HTTP",
+      "content": "When choosing between Express and built-in HTTP modules...",
+      "authorId": 2,
+      "tags": ["express", "http", "comparison"],
+      "published": true,
+      "createdAt": "2024-01-21T12:30:00Z",
+      "updatedAt": "2024-01-21T13:45:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Draft: TypeScript Best Practices",
+      "content": "This is a draft post about TypeScript...",
+      "authorId": 1,
+      "tags": ["typescript", "best-practices"],
+      "published": false,
+      "createdAt": "2024-01-22T16:20:00Z",
+      "updatedAt": "2024-01-22T16:20:00Z"
+    }
+  ],
+  "apiResponses": {
+    "hello": {
+      "simple": {
+        "message": "Hello from test server!",
+        "timestamp": "2024-01-25T10:00:00Z"
+      },
+      "withQuery": {
+        "message": "Hello from test server!",
+        "query": {
+          "name": "testuser",
+          "role": "developer"
+        },
+        "timestamp": "2024-01-25T10:00:00Z"
+      }
+    },
+    "data": {
+      "users": 42,
+      "posts": 128,
+      "categories": ["tech", "science", "arts", "business"],
+      "stats": {
+        "activeUsers": 38,
+        "publishedPosts": 95,
+        "draftPosts": 33
+      },
+      "lastUpdated": "2024-01-25T09:30:00Z"
+    }
+  },
+  "requestPayloads": {
+    "echo": {
+      "simple": {
+        "message": "Hello World",
+        "timestamp": "2024-01-25T10:00:00Z"
+      },
+      "complex": {
+        "user": {
+          "name": "Test User",
+          "email": "test@example.com",
+          "preferences": {
+            "theme": "dark",
+            "notifications": true,
+            "language": "en"
+          }
+        },
+        "action": "update_profile",
+        "metadata": {
+          "source": "web",
+          "userAgent": "Mozilla/5.0 Test Browser",
+          "sessionId": "sess_1234567890"
+        },
+        "data": [1, 2, 3, 4, 5]
+      },
+      "nested": {
+        "level1": {
+          "level2": {
+            "level3": {
+              "message": "Deep nested object",
+              "array": [
+                {
+                  "id": 1,
+                  "value": "first"
+                },
+                {
+                  "id": 2,
+                  "value": "second"
+                },
+                {
+                  "id": 3,
+                  "value": "third"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "withFiles": {
+        "files": [
+          {
+            "name": "document.pdf",
+            "size": 1024000,
+            "type": "application/pdf",
+            "lastModified": "2024-01-25T08:00:00Z"
+          },
+          {
+            "name": "image.jpg",
+            "size": 512000,
+            "type": "image/jpeg",
+            "lastModified": "2024-01-25T09:00:00Z"
+          }
+        ],
+        "metadata": {
+          "uploadSession": "upload_abc123",
+          "totalSize": 1536000
+        }
+      }
+    },
+    "createUser": {
+      "valid": {
+        "name": "New User",
+        "email": "newuser@example.com",
+        "password": "securePassword123",
+        "role": "user"
+      },
+      "admin": {
+        "name": "Admin User",
+        "email": "admin@example.com",
+        "password": "adminPassword456",
+        "role": "admin"
+      }
+    },
+    "updateUser": {
+      "partial": {
+        "name": "Updated Name"
+      },
+      "full": {
+        "name": "Fully Updated User",
+        "email": "updated@example.com",
+        "role": "moderator",
+        "active": true
+      }
+    }
+  },
+  "errorScenarios": {
+    "validation": {
+      "request": {
+        "name": "",
+        "email": "invalid-email",
+        "age": -5
+      },
+      "expectedResponse": {
+        "error": "Validation failed",
+        "details": [
+          "Field 'name' is required",
+          "Field 'email' must be a valid email address",
+          "Field 'age' must be a positive number"
+        ]
+      }
+    },
+    "unauthorized": {
+      "request": {
+        "action": "delete_user",
+        "userId": 123
+      },
+      "expectedResponse": {
+        "error": "Unauthorized",
+        "message": "Invalid or missing authentication token"
+      }
+    },
+    "notFound": {
+      "request": {
+        "userId": 999999
+      },
+      "expectedResponse": {
+        "error": "Not Found",
+        "message": "User with ID 999999 not found"
+      }
+    },
+    "serverError": {
+      "request": {
+        "trigger": "simulate_error"
+      },
+      "expectedResponse": {
+        "error": "Internal server error"
+      }
+    },
+    "invalidJson": {
+      "request": "{ invalid json }",
+      "expectedResponse": {
+        "error": "Invalid JSON format",
+        "hint": "Please send valid JSON in the request body"
+      }
+    },
+    "tooLarge": {
+      "request": {
+        "data": "LARGE_DATA_PLACEHOLDER"
+      },
+      "expectedResponse": {
+        "error": "Request body too large",
+        "maxSize": "10MB"
+      }
+    }
+  },
+  "queryParameters": {
+    "pagination": {
+      "page": 2,
+      "limit": 10,
+      "sortBy": "createdAt",
+      "sortOrder": "desc"
+    },
+    "filtering": {
+      "status": "active",
+      "role": "user",
+      "createdAfter": "2024-01-01T00:00:00Z"
+    },
+    "search": {
+      "q": "javascript tutorial",
+      "category": "tech",
+      "tags": "nodejs,express"
+    }
+  },
+  "headers": {
+    "standard": {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "User-Agent": "Test-Client/1.0"
+    },
+    "withAuth": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer test-jwt-token-123",
+      "X-Request-ID": "req_test_123456"
+    },
+    "withCustom": {
+      "Content-Type": "application/json",
+      "X-API-Version": "v1",
+      "X-Client-Version": "1.2.3",
+      "X-Feature-Flags": "feature1,feature2"
+    }
+  },
+  "configurations": {
+    "test": {
+      "PORT": 3001,
+      "NODE_ENV": "test",
+      "LOG_LEVEL": "error",
+      "CORS_ORIGIN": "*",
+      "MAX_BODY_SIZE": "10mb"
+    },
+    "development": {
+      "PORT": 3000,
+      "NODE_ENV": "development",
+      "LOG_LEVEL": "info",
+      "CORS_ORIGIN": "http://localhost:3000",
+      "MAX_BODY_SIZE": "10mb"
+    }
+  },
+  "mockDatabaseData": {
+    "categories": [
+      {
+        "id": 1,
+        "name": "Technology",
+        "slug": "tech",
+        "postCount": 45
+      },
+      {
+        "id": 2,
+        "name": "Science",
+        "slug": "science",
+        "postCount": 32
+      },
+      {
+        "id": 3,
+        "name": "Arts",
+        "slug": "arts",
+        "postCount": 28
+      },
+      {
+        "id": 4,
+        "name": "Business",
+        "slug": "business",
+        "postCount": 23
+      }
+    ],
+    "tags": [
+      {
+        "id": 1,
+        "name": "nodejs",
+        "usage": 15
+      },
+      {
+        "id": 2,
+        "name": "javascript",
+        "usage": 25
+      },
+      {
+        "id": 3,
+        "name": "express",
+        "usage": 8
+      },
+      {
+        "id": 4,
+        "name": "typescript",
+        "usage": 12
+      },
+      {
+        "id": 5,
+        "name": "testing",
+        "usage": 6
+      }
+    ],
+    "sessions": [
+      {
+        "id": "sess_abc123",
+        "userId": 1,
+        "createdAt": "2024-01-25T08:00:00Z",
+        "expiresAt": "2024-01-26T08:00:00Z",
+        "active": true
+      },
+      {
+        "id": "sess_def456",
+        "userId": 2,
+        "createdAt": "2024-01-25T09:00:00Z",
+        "expiresAt": "2024-01-26T09:00:00Z",
+        "active": true
+      }
+    ]
+  },
+  "performanceTestData": {
+    "bulkUsers": {
+      "count": 1000,
+      "template": {
+        "name": "User {index}",
+        "email": "user{index}@example.com",
+        "role": "user",
+        "active": true
+      }
+    },
+    "concurrentRequests": {
+      "count": 100,
+      "endpoint": "/api/hello",
+      "expectedSuccessRate": 0.99
+    }
+  },
+  "fileUploadData": {
+    "validFiles": [
+      {
+        "name": "test-image.jpg",
+        "type": "image/jpeg",
+        "size": 1024,
+        "content": "base64-encoded-content-here"
+      },
+      {
+        "name": "test-document.pdf",
+        "type": "application/pdf",
+        "size": 2048,
+        "content": "base64-encoded-pdf-content"
+      }
+    ],
+    "invalidFiles": [
+      {
+        "name": "malicious.exe",
+        "type": "application/octet-stream",
+        "size": 1024,
+        "reason": "Invalid file type"
+      },
+      {
+        "name": "too-large.jpg",
+        "type": "image/jpeg",
+        "size": 11534336,
+        "reason": "File too large"
+      }
+    ]
+  },
+  "sizeLimits": {
+    "maxFileSize": 10485760,
+    "maxBodySize": 10485760,
+    "testLargeSize": 11534336
+  }
+}

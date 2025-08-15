@@ -1,3 +1,3 @@
 **node-project**
 
-A demo package for Jenkins CI.
+Plain Node.js with HTTP and Express examples.
