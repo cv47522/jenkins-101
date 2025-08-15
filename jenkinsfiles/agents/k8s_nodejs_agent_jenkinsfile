@@ -25,8 +25,8 @@ pipeline {
   }
 
   environment {
-    PROJECT_DIR = "${WORKSPACE}"
-    NODE_PROJECT = "${PROJECT_DIR}/node_project"
+    PROJECTDIR = "${WORKSPACE}"
+    NODE_PROJECT = "${PROJECTDIR}/node_project"
     PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
   }
 
@@ -137,7 +137,7 @@ pipeline {
           echo "------------ Testing ------------"
           sh """
             echo "Running tests (if present)";
-            npm run test || echo "No tests";
+            npm test || echo "No tests";
           """
         }
       }
