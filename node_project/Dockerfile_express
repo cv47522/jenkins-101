@@ -3,6 +3,17 @@
 ARG DOCKER_REGISTRY=docker.io
 FROM ${DOCKER_REGISTRY}/node:24-alpine
 
+# (Optional, not needed in Jenkins build) Set company internal proxy settings for plugin install
+ARG PROXY=http://10.158.100.1:8080
+ARG NOPROXY='localhost,127.0.0.1,10.0.2.15,localaddress,.localdomain.com'
+
+ENV HTTP_PROXY=$PROXY \
+    HTTPS_PROXY=$PROXY \
+    NO_PROXY=$NOPROXY \
+    http_proxy=$PROXY \
+    https_proxy=$PROXY \
+    no_proxy=$NOPROXY
+
 # Build arguments
 ARG BUILD_DATE
 ARG GIT_COMMIT
