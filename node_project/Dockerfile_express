@@ -1,5 +1,7 @@
-# TODO: Run $ docker buildx build --no-cache --progress=plain -f ./Dockerfile_express -t plain-node-express-server:1.0 .
-FROM node:24-alpine AS base
+# TODO: Run $ docker buildx build --no-cache --progress=plain --build-arg DOCKER_REGISTRY=registry1-docker-io.example.com -f ./Dockerfile_express -t plain-node-express-server:1.0 .
+
+ARG DOCKER_REGISTRY=docker.io
+FROM ${DOCKER_REGISTRY}/node:24-alpine
 
 # (Optional, not needed in Jenkins build) Set company internal proxy settings for plugin install
 ARG PROXY=http://10.158.100.1:8080
@@ -12,15 +14,33 @@ ENV HTTP_PROXY=$PROXY \
     https_proxy=$PROXY \
     no_proxy=$NOPROXY
 
+# Build arguments
+ARG BUILD_DATE
+ARG GIT_COMMIT
+
+# (Optional) Labels for metadata
+LABEL maintainer="your-email@example.com" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.title="My Node App" \
+      org.opencontainers.image.description="Example Node.js application"
+
 WORKDIR /app
 
-COPY . .
+# Leverage layer cache: copy only manifests before npm ci
+COPY package*.json ./
 
+USER root
+
+# Alpine base doesn’t have curl by default; install or switch to wget
 ###  Installing dependencies
 # Without package-lock.json, run:
 # RUN npm install --no-optional --verbose --omit=dev && npm cache clean --force
 # With package-lock.json, run:
-RUN npm ci --no-optional --verbose --omit=dev && npm cache clean --force
+RUN npm ci --no-optional --verbose --omit=dev && npm cache clean --force \
+    apk add --no-cache curl
+
+COPY . .
 
 # nodejs → name of the group to create.
 # -g 1001 → set the group’s GID (group ID) to 1001.
@@ -32,11 +52,12 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S appuser -u 1001 && \
     chown -R appuser:nodejs /app
 
+# Switch to non-root user
 USER appuser
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/health').then(res=>res.json()).then(console.log).catch(()=>process.exit(1))"
+  CMD curl -f http://localhost:3000/health || exit 1
 
 CMD ["npm", "run", "start:express"]

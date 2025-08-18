@@ -28,7 +28,6 @@ pipeline {
     PROJECTDIR = "${WORKSPACE}"
     NODE_PROJECT = "${PROJECTDIR}/node_project"
     PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
-    DOCKER_REGISTRY = 'docker.io'
     IMAGE_TAG = "${BUILD_NUMBER}"
     GIT_COMMIT = "${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
     BUILD_DATE = new Date().format('yyyy-MM-dd')
@@ -44,6 +43,11 @@ pipeline {
       name: 'DOCKERFILE',
       choices: ['Dockerfile_http', 'Dockerfile_express'],
       description: 'Select the Dockerfile to build image'
+    )
+    string(
+      name: 'DOCKER_REGISTRY',
+      defaultValue: 'docker.io',
+      description: 'Specify the docker registry to pull images'
     )
   }
 
@@ -99,6 +103,87 @@ pipeline {
       }
     }
 
+    // One-time logins for the whole build
+    stage('Registry Login (once)') {
+      steps {
+        container('docker-client') {
+          sh '''
+            set -euo pipefail
+            echo "⏳ Waiting for Docker daemon..."
+            for i in \$(seq 1 60); do
+              docker info >/dev/null 2>&1 && break
+              sleep 1
+            done
+            docker info >/dev/null 2>&1 || { echo "❌ dockerd not ready"; exit 1; }
+          '''
+          // Login and push to DockerHub
+          withCredentials([
+            usernamePassword(credentialsId: 'docker-company-credentials',
+              usernameVariable: 'INT_USER', passwordVariable: 'INT_PASS'),
+            usernamePassword(credentialsId: 'dockerhub-credentials',
+              usernameVariable: 'HUB_USER', passwordVariable: 'HUB_PASS')
+          ]) {
+            // NOTE: single-quoted Groovy string => no interpolation leakage
+            // The same /root/.docker/config.json is reused by all CLI calls in the pod.
+            sh '''
+              set -euo pipefail
+              echo "🔐 Login -> internal registry..."
+              echo "$INT_PASS" | docker login "$DOCKER_REGISTRY" -u "$INT_USER" --password-stdin
+              echo "🔐 Login -> Docker Hub..."
+              # echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Dockerfile Linting') {
+      steps {
+        script {
+          container('docker-client') {
+            dir(NODE_PROJECT) {
+              echo "🔍 Linting Dockerfile..."
+              // (Method 1) robust in DinD: pipe file via stdin, no bind-mount needed
+              int rc = sh(script: """
+                  set +e
+                  cat "${DOCKERFILE}" | docker run --rm -i ${params.DOCKER_REGISTRY}/hadolint/hadolint \
+                    hadolint --verbose --failure-threshold warning --format tty - | tee hadolint.out
+                  exit ${PIPESTATUS:-0}   # propagate hadolint's exit code through the pipe
+                """, returnStatus: true)
+              if (rc != 0) {
+                error "❌ Dockerfile lint failed (>= warning). See hadolint.out above."
+              } else {
+                echo  "✅ Dockerfile lint passed (no warnings or errors)."
+              }
+
+              // (Method 2) if you prefer path-based linting: bind-mount WORKSPACE for DinD
+              // sh """
+              //   docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" \
+              //     ${params.DOCKER_REGISTRY}/hadolint/hadolint \
+              //     hadolint --verbose ${DOCKERFILE}
+              // """
+            }
+          }
+          // (Method 3)
+          // container('hadolint') { // TODO: Add 'hadolint' container to pod.yaml
+          //   sh "hadolint --verbose --failure-threshold warning ${DOCKERFILE}"
+          // }
+        }
+      }
+    }
+
+    stage('Secret Scanning') {
+      steps {
+        container('docker-client') {
+          sh '''
+            echo "🔍 Scanning for secrets in source code..."
+            # Add secret scanning tools here
+            grep -r "password\\|secret\\|key\\|token" . || true
+          '''
+        }
+      }
+    }
+
     stage('Build & Test & Package Application') {
       steps {
         container('node') {
@@ -125,17 +210,28 @@ pipeline {
     stage('Prepare Docker Context') {
       steps {
         container('docker-client') {
-          sh '''
-            # Setup buildx for multi-architecture builds
-            docker buildx create --use --name multiarch-builder || true
+          if (params.DOCKER_REGISTRY == 'docker.io') {
+            sh """
+            # (Without Proxy)
+             docker buildx create --use --name multiarch-builder
+            """
+          } else {
+            sh """
+              # (With Proxy) Setup buildx for multi-architecture builds
+              docker buildx create --use --name multiarch-builder \
+                --driver docker-container \
+                --driver-opt image=${params.DOCKER_REGISTRY}/moby/buildkit:buildx-stable-1
+            """
+          }
+          sh """
             docker buildx inspect --bootstrap
-
             # Show available platforms
             docker buildx ls
-          '''
+          """
         }
       }
     }
+
 
     stage('Build Multi-Arch Images') {
       parallel {
@@ -143,24 +239,17 @@ pipeline {
           steps {
             container('docker-client') {
               dir(NODE_PROJECT) {
-                // Login and push to DockerHub
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USERNAME',
-                    passwordVariable: 'DOCKER_PASSWORD'
-                )]) {
-                  sh """
-                    echo "🏗️ Building AMD64 image..."
-                    echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
-                    docker buildx build \
-                      --platform linux/amd64 \
-                      -f ${params.DOCKERFILE} \
-                      --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                      --build-arg BUILD_DATE="${BUILD_DATE}" \
-                      --build-arg GIT_COMMIT="${GIT_COMMIT}" \
-                      --load .
-                  """
-                }
+                sh """
+                  echo "🏗️ Building AMD64 image..."
+                  docker buildx build \
+                    --platform linux/amd64 \
+                    -f ${params.DOCKERFILE} \
+                    --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    --build-arg DOCKER_REGISTRY=${params.DOCKER_REGISTRY} \
+                    --build-arg BUILD_DATE="${BUILD_DATE}" \
+                    --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+                    --load .
+                """
               }
             }
           }
@@ -170,24 +259,17 @@ pipeline {
           steps {
             container('docker-client') {
               dir(NODE_PROJECT) {
-                // Login and push to DockerHub
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USERNAME',
-                    passwordVariable: 'DOCKER_PASSWORD'
-                )]) {
-                  sh """
-                    echo "🏗️ Building ARM64 image..."
-                    echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
-                    docker buildx build \
-                      --platform linux/arm64 \
-                      -f ${params.DOCKERFILE} \
-                      --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 \
-                      --build-arg BUILD_DATE="${BUILD_DATE}" \
-                      --build-arg GIT_COMMIT="${GIT_COMMIT}" \
-                      --load .
-                  """
-                }
+                sh """
+                  echo "🏗️ Building ARM64 image..."
+                  docker buildx build \
+                    --platform linux/arm64 \
+                    -f ${params.DOCKERFILE} \
+                    --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                    --build-arg DOCKER_REGISTRY=${params.DOCKER_REGISTRY} \
+                    --build-arg BUILD_DATE="${BUILD_DATE}" \
+                    --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+                    --load .
+                """
               }
             }
           }
@@ -247,36 +329,26 @@ pipeline {
       steps {
         script {
           container('docker-client') {
-            // Login and push to DockerHub
-            withCredentials([usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )]) {
-              sh """
-                echo "🔐 Logging into DockerHub..."
-                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
+            sh """
+              echo "📤 Pushing individual architecture images..."
+              docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64
+              docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
 
-                echo "📤 Pushing individual architecture images..."
-                docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64
-                docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
+              echo "📋 Creating and pushing multi-arch manifest..."
+              docker manifest create ${FULL_IMAGE_NAME}:${IMAGE_TAG} \
+                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
 
-                echo "📋 Creating and pushing multi-arch manifest..."
-                docker manifest create ${FULL_IMAGE_NAME}:${IMAGE_TAG} \
-                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
+              docker manifest create ${FULL_IMAGE_NAME}:latest \
+                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
 
-                docker manifest create ${FULL_IMAGE_NAME}:latest \
-                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                    ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
+              docker manifest push ${FULL_IMAGE_NAME}:${IMAGE_TAG}
+              docker manifest push ${FULL_IMAGE_NAME}:latest
 
-                docker manifest push ${FULL_IMAGE_NAME}:${IMAGE_TAG}
-                docker manifest push ${FULL_IMAGE_NAME}:latest
-
-                echo "🚀 Multi-arch image published successfully!"
-                docker logout
-            """
-            }
+              echo "🚀 Multi-arch image published successfully!"
+              docker logout
+          """
           }
         }
       }
