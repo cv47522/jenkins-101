@@ -209,25 +209,27 @@ pipeline {
 
     stage('Prepare Docker Context') {
       steps {
-        container('docker-client') {
-          if (params.DOCKER_REGISTRY == 'docker.io') {
+        script {
+          container('docker-client') {
+            if (params.DOCKER_REGISTRY == 'docker.io') {
+              sh """
+              # (Without Proxy)
+              docker buildx create --use --name multiarch-builder
+              """
+            } else {
+              sh """
+                # (With Proxy) Setup buildx for multi-architecture builds
+                docker buildx create --use --name multiarch-builder \
+                  --driver docker-container \
+                  --driver-opt image=${params.DOCKER_REGISTRY}/moby/buildkit:buildx-stable-1
+              """
+            }
             sh """
-            # (Without Proxy)
-             docker buildx create --use --name multiarch-builder
-            """
-          } else {
-            sh """
-              # (With Proxy) Setup buildx for multi-architecture builds
-              docker buildx create --use --name multiarch-builder \
-                --driver docker-container \
-                --driver-opt image=${params.DOCKER_REGISTRY}/moby/buildkit:buildx-stable-1
+              docker buildx inspect --bootstrap
+              # Show available platforms
+              docker buildx ls
             """
           }
-          sh """
-            docker buildx inspect --bootstrap
-            # Show available platforms
-            docker buildx ls
-          """
         }
       }
     }
