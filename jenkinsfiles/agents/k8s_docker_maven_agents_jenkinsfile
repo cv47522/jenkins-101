@@ -1,3 +1,5 @@
+String packageVersion = ''
+
 pipeline {
   agent {
     kubernetes {
@@ -23,7 +25,6 @@ pipeline {
     PACKAGE_NAME = 'maven_project'
     // Write settings.xml directly to Jenkins workspace
     MAVEN_SETTINGS_XML = "${PROJECT_DIR}/settings.xml"
-    DOCKER_REGISTRY = 'docker.io'
     IMAGE_NAME = 'cv47522/my-java-app'
     IMAGE_TAG = "${BUILD_NUMBER}"
   }
@@ -33,6 +34,11 @@ pipeline {
       name: 'CHECKOUT_REPO',
       defaultValue: false,
       description: 'Enable extra stage to checkout repo if not using "Pipeline script from SCM" config'
+    )
+    string(
+      name: 'DOCKER_REGISTRY',
+      defaultValue: 'docker.io',
+      description: 'Specify the docker registry to pull images'
     )
   }
 
@@ -72,7 +78,7 @@ pipeline {
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
                               http://maven.apache.org/xsd/settings-1.0.0.xsd">
   <proxies>
     <proxy>
@@ -121,6 +127,39 @@ pipeline {
       }
     }
 
+    // One-time logins for the whole build
+    stage('Registry Login (once)') {
+      steps {
+        container('docker-client') {
+          sh '''
+            set -euo pipefail
+            echo "⏳ Waiting for Docker daemon..."
+            for i in \$(seq 1 60); do
+              docker info >/dev/null 2>&1 && break
+              sleep 1
+            done
+            docker info >/dev/null 2>&1 || { echo "❌ dockerd not ready"; exit 1; }
+          '''
+          // Login and push to DockerHub
+          withCredentials([
+            usernamePassword(credentialsId: 'docker-company-credentials',
+              usernameVariable: 'INT_USER', passwordVariable: 'INT_PASS'),
+            usernamePassword(credentialsId: 'dockerhub-credentials',
+              usernameVariable: 'HUB_USER', passwordVariable: 'HUB_PASS')
+          ]) {
+            // NOTE: single-quoted Groovy string => no interpolation leakage
+            // The same /root/.docker/config.json is reused by all CLI calls in the pod.
+            sh '''
+              echo "🔐 Login -> internal registry..."
+              echo "$INT_PASS" | docker login "$params.DOCKER_REGISTRY" -u "$INT_USER" --password-stdin
+              echo "🔐 Login -> Docker Hub..."
+              # echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
+            '''
+          }
+        }
+      }
+    }
+
     stage('Build & Test & Package Application') {
       steps {
         container('maven') {
@@ -142,19 +181,11 @@ pipeline {
       steps {
         container('docker-client') {
           dir(MAVEN_PROJECT) {
-            // Login and push to DockerHub
-            withCredentials([usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )]) {
-              sh """
-                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
-                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
-                docker images | grep ${IMAGE_NAME}
-              """
-            }
+            sh """
+              docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+              docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+              docker images | grep ${IMAGE_NAME}
+            """
           }
         }
       }
@@ -164,19 +195,11 @@ pipeline {
       steps {
         script {
           container('docker-client') {
-            // Login and push to DockerHub
-            withCredentials([usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USERNAME',
-                passwordVariable: 'DOCKER_PASSWORD'
-            )]) {
-              sh """
-                echo "\$DOCKER_PASSWORD" | docker login -u "\$DOCKER_USERNAME" --password-stdin
-                docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                docker push ${IMAGE_NAME}:latest
-                docker logout
+            sh """
+              docker push ${IMAGE_NAME}:${IMAGE_TAG}
+              docker push ${IMAGE_NAME}:latest
+              docker logout
             """
-            }
           }
         }
       }

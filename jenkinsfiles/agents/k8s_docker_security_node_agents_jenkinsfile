@@ -126,9 +126,8 @@ pipeline {
             // NOTE: single-quoted Groovy string => no interpolation leakage
             // The same /root/.docker/config.json is reused by all CLI calls in the pod.
             sh '''
-              set -euo pipefail
               echo "🔐 Login -> internal registry..."
-              echo "$INT_PASS" | docker login "$DOCKER_REGISTRY" -u "$INT_USER" --password-stdin
+              echo "$INT_PASS" | docker login "$params.DOCKER_REGISTRY" -u "$INT_USER" --password-stdin
               echo "🔐 Login -> Docker Hub..."
               # echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
             '''
