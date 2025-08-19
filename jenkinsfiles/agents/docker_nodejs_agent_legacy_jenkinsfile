@@ -1,21 +1,3 @@
-
-
-/** Global variables used inside functions **/
-// Constants
-// @Field String VAR_WITH_FIELD = 'original value2'
-// VAR_WITHOUT_TYPE_FIELD = 'original value3'
-
-// Variables
-// varWithDynamicValue = ''
-
-
-/** Global variables used outside functions **/
-// Constants
-// String VAR_WITHOUT_FIELD = 'original value1'
-
-// Variables
-String packageVersion = ''
-
 pipeline {
   agent { label 'docker-agent-nodejs-alpine' }
 
@@ -76,9 +58,9 @@ pipeline {
           dir(NODE_PROJECT) {
             // (Method 1) Install Jenkins plugin: Pipeline Utility Steps) Extract version from package.json
             def packageJson = readJSON file: 'package.json'
-            packageVersion = packageJson.version
+            String packageVersion = packageJson.version
             // (Method 2) CMD
-            // packageVersion = sh(script: '''
+            // String packageVersion = sh(script: '''
             //   npm pkg get version | tr -d '"'
             // ''', returnStdout: true).trim()
 

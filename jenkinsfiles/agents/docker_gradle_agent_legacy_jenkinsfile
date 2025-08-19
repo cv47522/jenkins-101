@@ -1,21 +1,8 @@
-
-
-/** Global variables used inside functions **/
-// Constants
-// @Field String VAR_WITH_FIELD = 'original value2'
-// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+import groovy.transform.Field
 
 // Variables
-// varWithDynamicValue = ''
+@Field String gradleCmd = 'gradle --no-daemon --console=plain'  // Always include --no-daemon
 
-
-/** Global variables used outside functions **/
-// Constants
-// String VAR_WITHOUT_FIELD = 'original value1'
-
-// Variables
-String gradleCmd = 'gradle --no-daemon --console=plain'  // Always include --no-daemon
-String packageVersion = ''
 
 pipeline {
   agent { label 'docker-agent-gradle-java21-alpine' }
@@ -83,7 +70,7 @@ pipeline {
             }
 
             // Run the properties task quietly, extract the "version" line
-            packageVersion = sh(script: "${gradleCmd} properties -q | grep '^version:' | awk '{print \$2}'",
+            String packageVersion = sh(script: "${gradleCmd} properties -q | grep '^version:' | awk '{print \$2}'",
               returnStdout: true).trim()
             echo "Resolved ${PACKAGE_NAME} Gradle Package Version: ${packageVersion}"
             currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"

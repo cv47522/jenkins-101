@@ -1,5 +1,3 @@
-String packageVersion = ''
-
 pipeline {
   agent {
     kubernetes {
@@ -119,7 +117,7 @@ pipeline {
           dir(MAVEN_PROJECT) {
             // Read and parse pom.xml
             def pom = readMavenPom file: 'pom.xml'
-            packageVersion = pom.version
+            String packageVersion = pom.version
             echo "Resolved ${PACKAGE_NAME} Maven Package Version: ${packageVersion}"
             currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
           }
@@ -149,12 +147,12 @@ pipeline {
           ]) {
             // NOTE: single-quoted Groovy string => no interpolation leakage
             // The same /root/.docker/config.json is reused by all CLI calls in the pod.
-            sh '''
+            sh """
               echo "🔐 Login -> internal registry..."
-              echo "$INT_PASS" | docker login "$params.DOCKER_REGISTRY" -u "$INT_USER" --password-stdin
+              echo "${INT_PASS}" | docker login "${params.DOCKER_REGISTRY}" -u "${INT_USER}" --password-stdin
               echo "🔐 Login -> Docker Hub..."
-              # echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
-            '''
+              # echo "${HUB_PASS}" | docker login -u "${HUB_USER}" --password-stdin
+            """
           }
         }
       }

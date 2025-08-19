@@ -1,6 +1,6 @@
 pipeline {
   agent none
- 
+
   stages {
     stage ('Build Node.js Front-end') {
       // TODO: (Manage Jenkins > Clouds > docker > Configure > Docker Agent templates) Add a new Agent template with:

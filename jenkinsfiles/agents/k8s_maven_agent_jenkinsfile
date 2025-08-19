@@ -1,10 +1,8 @@
-/** Global variables used outside functions **/
-// Constants
-// String VAR_WITHOUT_FIELD = 'original value1'
+import groovy.transform.Field
 
 // Variables
-String mvnCmd = 'mvn'
-String packageVersion = ''
+@Field String mvnCmd = 'mvn'
+
 pipeline {
   agent {
     kubernetes {
@@ -137,7 +135,7 @@ pipeline {
           dir(MAVEN_PROJECT) {
             // Read and parse pom.xml
             def pom = readMavenPom file: 'pom.xml'
-            packageVersion = pom.version
+            String packageVersion = pom.version
             echo "Resolved ${PACKAGE_NAME} Maven Package Version: ${packageVersion}"
             currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
           }

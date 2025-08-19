@@ -31,7 +31,6 @@ pipeline {
       '''
     }
   }
-  
   stages {
     stage('Run Maven') {
       steps {

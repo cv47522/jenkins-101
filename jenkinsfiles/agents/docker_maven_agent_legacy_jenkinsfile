@@ -1,21 +1,8 @@
-
-
-/** Global variables used inside functions **/
-// Constants
-// @Field String VAR_WITH_FIELD = 'original value2'
-// VAR_WITHOUT_TYPE_FIELD = 'original value3'
+import groovy.transform.Field
 
 // Variables
-// varWithDynamicValue = ''
+@Field String mvnCmd = 'mvn'
 
-
-/** Global variables used outside functions **/
-// Constants
-// String VAR_WITHOUT_FIELD = 'original value1'
-
-// Variables
-String mvnCmd = 'mvn'
-String packageVersion = ''
 
 pipeline {
   agent { label 'docker-agent-maven-java21-alpine' }
@@ -77,7 +64,7 @@ pipeline {
           dir(MAVEN_PROJECT) {
             // Read and parse pom.xml
             def pom = readMavenPom file: 'pom.xml'
-            packageVersion = pom.version
+            String packageVersion = pom.version
             echo "Resolved ${PACKAGE_NAME} Maven Package Version: ${packageVersion}"
             currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
           }

@@ -1,9 +1,8 @@
-/** Global variables used outside functions **/
+import groovy.transform.Field
+
 // Constants
-String IMAGE_NAME = params.DOCKERFILE == 'Dockerfile_http' ? 'plain-node-http-server' : 'plain-node-express-server'
-String FULL_IMAGE_NAME = "cv47522/${IMAGE_NAME}"
-// Variables
-String packageVersion = ''
+@Field final String IMAGE_NAME = params.DOCKERFILE == 'Dockerfile_http' ? 'plain-node-http-server' : 'plain-node-express-server'
+@Field final String FULL_IMAGE_NAME = "cv47522/${IMAGE_NAME}"
 
 pipeline {
   agent {
@@ -86,9 +85,9 @@ pipeline {
           dir(NODE_PROJECT) {
             // (Method 1) Install Jenkins plugin: Pipeline Utility Steps) Extract version from package.json
             def packageJson = readJSON file: 'package.json'
-            packageVersion = packageJson.version
+            String packageVersion = packageJson.version
             // (Method 2) CMD
-            // packageVersion = sh(script: '''
+            // String packageVersion = sh(script: '''
             //   npm pkg get version | tr -d '"'
             // ''', returnStdout: true).trim()
 
@@ -125,12 +124,12 @@ pipeline {
           ]) {
             // NOTE: single-quoted Groovy string => no interpolation leakage
             // The same /root/.docker/config.json is reused by all CLI calls in the pod.
-            sh '''
+            sh """
               echo "🔐 Login -> internal registry..."
-              echo "$INT_PASS" | docker login "$params.DOCKER_REGISTRY" -u "$INT_USER" --password-stdin
+              echo "${INT_PASS}" | docker login "${params.DOCKER_REGISTRY}" -u "${INT_USER}" --password-stdin
               echo "🔐 Login -> Docker Hub..."
-              # echo "$HUB_PASS" | docker login -u "$HUB_USER" --password-stdin
-            '''
+              # echo "${HUB_PASS}" | docker login -u "${HUB_USER}" --password-stdin
+            """
           }
         }
       }
