@@ -1,10 +1,3 @@
-import groovy.transform.Field
-
-// Variables
-@Field String imageName = params.DOCKERFILE == 'Dockerfile_http' ? 'plain-node-http-server' : 'plain-node-express-server'
-// Constants
-@Field final String FULL_IMAGE_NAME = "cv47522/${imageName}"
-
 pipeline {
   agent {
     kubernetes {
@@ -24,13 +17,12 @@ pipeline {
     timeout(time: 5, unit: 'MINUTES')
   }
 
-  environment {
-    PROJECTDIR = "${WORKSPACE}"
-    NODE_PROJECT = "${PROJECTDIR}/node_project"
+  environment { // Keep env block simple; avoid Groovy functions here
+    env.PROJECTDIR = "${WORKSPACE}"
+    NODE_PROJECT = "${env.PROJECTDIR}/node_project"
     PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
-    IMAGE_TAG = "${BUILD_NUMBER}"
-    GIT_COMMIT = "${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
-    BUILD_DATE = new Date().format('yyyy-MM-dd')
+    env.IMAGE_TAG = "${BUILD_NUMBER}"
+    // env.BUILD_DATE and env.GIT_COMMIT_SHORT are set at runtime in "Init Runtime Vars"
   }
 
   parameters {
@@ -80,6 +72,25 @@ pipeline {
       }
     }
 
+    stage('Init Runtime Vars') {
+      steps {
+        script {
+          // Compute anything that depends on params/env at RUN time (on agent)
+          env.IMAGE_NAME       = (params.DOCKERFILE == 'Dockerfile_http'
+                                  ? 'plain-node-http-server'
+                                  : 'plain-node-express-server')
+          env.FULL_IMAGE_NAME  = "cv47522/${env.IMAGE_NAME}"
+          env.BUILD_DATE       = new Date().format('yyyy-MM-dd')
+          env.GIT_COMMIT_SHORT = (env.GIT_COMMIT ?: 'unknown').take(7)
+
+          echo "Resolved env.IMAGE_NAME=${env.IMAGE_NAME}"
+          echo "env.FULL_IMAGE_NAME=${env.FULL_IMAGE_NAME}"
+          echo "env.BUILD_DATE=${env.BUILD_DATE}, env.GIT_COMMIT_SHORT=${env.GIT_COMMIT_SHORT}"
+        }
+      }
+    }
+
+
     stage('Get Package Version') {
       steps {
         script {
@@ -95,9 +106,9 @@ pipeline {
             echo "Resolved ${PACKAGE_NAME} Node.js Package Version: ${packageVersion}"
             currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
 
-            echo "🚀 Building ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
-            echo "📅 Build Date: ${BUILD_DATE}"
-            echo "🔍 Git Commit: ${GIT_COMMIT}"
+            echo "🚀 Building ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}"
+            echo "📅 Build Date: ${env.BUILD_DATE}"
+            echo "🔍 Git Commit: ${env.GIT_COMMIT}"
           }
         }
       }
@@ -145,7 +156,7 @@ pipeline {
               // (Method 1) robust in DinD: pipe file via stdin, no bind-mount needed
               int rc = sh(script: """
                   set +e
-                  cat "${DOCKERFILE}" | docker run --rm -i ${params.DOCKER_REGISTRY}/hadolint/hadolint \
+                  cat "${params.DOCKERFILE}" | docker run --rm -i ${params.DOCKER_REGISTRY}/hadolint/hadolint \
                     hadolint --verbose --failure-threshold warning --format tty - | tee hadolint.out
                   exit ${PIPESTATUS:-0}   # propagate hadolint's exit code through the pipe
                 """, returnStatus: true)
@@ -245,10 +256,10 @@ pipeline {
                   docker buildx build \
                     --platform linux/amd64 \
                     -f ${params.DOCKERFILE} \
-                    --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
+                    --tag  ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64 \
                     --build-arg DOCKER_REGISTRY=${params.DOCKER_REGISTRY} \
-                    --build-arg BUILD_DATE="${BUILD_DATE}" \
-                    --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+                    --build-arg BUILD_DATE="${env.BUILD_DATE}" \
+                    --build-arg GIT_COMMIT="${env.GIT_COMMIT}" \
                     --load .
                 """
               }
@@ -265,10 +276,10 @@ pipeline {
                   docker buildx build \
                     --platform linux/arm64 \
                     -f ${params.DOCKERFILE} \
-                    --tag  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 \
+                    --tag  ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64 \
                     --build-arg DOCKER_REGISTRY=${params.DOCKER_REGISTRY} \
-                    --build-arg BUILD_DATE="${BUILD_DATE}" \
-                    --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+                    --build-arg BUILD_DATE="${env.BUILD_DATE}" \
+                    --build-arg GIT_COMMIT="${env.GIT_COMMIT}" \
                     --load .
                 """
               }
@@ -290,12 +301,12 @@ pipeline {
               dir(NODE_PROJECT) {
                 sh """
                   echo "🔍 Scanning AMD64 image for vulnerabilities..."
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
+                  trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
+                  trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --format template \
-                    --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${imageName}_${IMAGE_TAG}-${ARCH}.html
+                    --template "@${env.PROJECTDIR}/security_scan/trivy/html.tpl" \
+                    -o security-report_${env.IMAGE_NAME}_${env.IMAGE_TAG}-${ARCH}.html
                 """
               }
             }
@@ -312,12 +323,12 @@ pipeline {
               dir(NODE_PROJECT) {
                 sh """
                   echo "🔍 Scanning ARM64 image for vulnerabilities..."
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
+                  trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
-                  trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
+                  trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --format template \
-                    --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${imageName}_${IMAGE_TAG}-${ARCH}.html
+                    --template "@${env.PROJECTDIR}/security_scan/trivy/html.tpl" \
+                    -o security-report_${env.IMAGE_NAME}_${env.IMAGE_TAG}-${ARCH}.html
                 """
               }
             }
@@ -332,20 +343,20 @@ pipeline {
           container('docker-client') {
             sh """
               echo "📤 Pushing individual architecture images..."
-              docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64
-              docker push ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
+              docker push ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64
+              docker push ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64
 
               echo "📋 Creating and pushing multi-arch manifest..."
-              docker manifest create ${FULL_IMAGE_NAME}:${IMAGE_TAG} \
-                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
+              docker manifest create ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG} \
+                  ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64 \
+                  ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64
 
-              docker manifest create ${FULL_IMAGE_NAME}:latest \
-                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 \
-                  ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64
+              docker manifest create ${env.FULL_IMAGE_NAME}:latest \
+                  ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64 \
+                  ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64
 
-              docker manifest push ${FULL_IMAGE_NAME}:${IMAGE_TAG}
-              docker manifest push ${FULL_IMAGE_NAME}:latest
+              docker manifest push ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}
+              docker manifest push ${env.FULL_IMAGE_NAME}:latest
 
               echo "🚀 Multi-arch image published successfully!"
               docker logout
@@ -361,14 +372,14 @@ pipeline {
           sh """
             echo "📊 Build Report"
             echo "=============="
-            echo "Image: ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Image: ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}"
             echo "Platforms: linux/amd64, linux/arm64"
-            echo "Build Date: ${BUILD_DATE}"
-            echo "Git Commit: ${GIT_COMMIT}"
+            echo "Build Date: ${env.BUILD_DATE}"
+            echo "Git Commit: ${env.GIT_COMMIT}"
             echo "Jenkins Build: ${BUILD_NUMBER}"
 
             # Show image information
-            docker images | grep ${FULL_IMAGE_NAME} || true
+            docker images | grep ${env.FULL_IMAGE_NAME} || true
           """
         }
       }
@@ -384,8 +395,8 @@ pipeline {
       //   // (Optioanl, images already removed after each Pod dies in each build) Cleanup local images to save space
       //   sh """
       //     echo "🧹 Cleaning up..."
-      //     docker rmi ${FULL_IMAGE_NAME}:${IMAGE_TAG}-amd64 || true
-      //     docker rmi ${FULL_IMAGE_NAME}:${IMAGE_TAG}-arm64 || true
+      //     docker rmi ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64 || true
+      //     docker rmi ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64 || true
       //     docker system prune -f
       //     docker buildx rm multiarch-builder || true
       //   """
@@ -393,7 +404,7 @@ pipeline {
       cleanWs()
     }
     success {
-      echo "✅ Successfully built and pushed ${FULL_IMAGE_NAME}:${IMAGE_TAG}"
+      echo "✅ Successfully built and pushed ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}"
     }
     failure {
       echo "❌ Pipeline failed. Check logs for details."
