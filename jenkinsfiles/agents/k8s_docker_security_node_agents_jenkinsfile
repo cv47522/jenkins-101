@@ -119,7 +119,7 @@ pipeline {
       steps {
         container('docker-client') {
           sh '''
-            set -euo pipefail
+            set -euxo pipefail
             echo "⏳ Waiting for Docker daemon..."
             for i in \$(seq 1 60); do
               docker info >/dev/null 2>&1 && break
@@ -137,6 +137,7 @@ pipeline {
             // NOTE: single-quoted Groovy string => no interpolation leakage
             // The same /root/.docker/config.json is reused by all CLI calls in the pod.
             sh """
+              set -euxo pipefail
               echo "🔐 Login -> internal registry..."
               echo "${INT_PASS}" | docker login "${params.DOCKER_REGISTRY}" -u "${INT_USER}" --password-stdin
               echo "🔐 Login -> Docker Hub..."
@@ -168,6 +169,7 @@ pipeline {
 
               // (Method 2) if you prefer path-based linting: bind-mount WORKSPACE for DinD
               // sh """
+              //   set -euxo pipefail
               //   docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" \
               //     ${params.DOCKER_REGISTRY}/hadolint/hadolint \
               //     hadolint --verbose ${DOCKERFILE}
@@ -199,6 +201,7 @@ pipeline {
         container('node') {
           dir(NODE_PROJECT) {
             sh """
+              set -euxo pipefail
               echo "📦 Installing dependencies..."
               npm ci --omit=dev
 
@@ -223,11 +226,13 @@ pipeline {
           container('docker-client') {
             if (params.DOCKER_REGISTRY == 'docker.io') {
               sh """
-              # (Without Proxy)
-              docker buildx create --use --name multiarch-builder
+                set -euxo pipefail
+                # (Without Proxy)
+                docker buildx create --use --name multiarch-builder
               """
             } else {
               sh """
+                set -euxo pipefail
                 # (With Proxy) Setup buildx for multi-architecture builds
                 docker buildx create --use --name multiarch-builder \
                   --driver docker-container \
@@ -235,6 +240,7 @@ pipeline {
               """
             }
             sh """
+              set -euxo pipefail
               docker buildx inspect --bootstrap
               # Show available platforms
               docker buildx ls
@@ -252,6 +258,7 @@ pipeline {
             container('docker-client') {
               dir(NODE_PROJECT) {
                 sh """
+                  set -euxo pipefail
                   echo "🏗️ Building AMD64 image..."
                   docker buildx build \
                     --platform linux/amd64 \
@@ -272,6 +279,7 @@ pipeline {
             container('docker-client') {
               dir(NODE_PROJECT) {
                 sh """
+                  set -euxo pipefail
                   echo "🏗️ Building ARM64 image..."
                   docker buildx build \
                     --platform linux/arm64 \
@@ -300,6 +308,7 @@ pipeline {
             container('trivy') {
               dir(NODE_PROJECT) {
                 sh """
+                  set -euxo pipefail
                   echo "🔍 Scanning AMD64 image for vulnerabilities..."
                   trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
@@ -322,6 +331,7 @@ pipeline {
             container('trivy') {
               dir(NODE_PROJECT) {
                 sh """
+                  set -euxo pipefail
                   echo "🔍 Scanning ARM64 image for vulnerabilities..."
                   trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --severity HIGH,CRITICAL --format table
@@ -342,6 +352,7 @@ pipeline {
         script {
           container('docker-client') {
             sh """
+              set -euxo pipefail
               echo "📤 Pushing individual architecture images..."
               docker push ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64
               docker push ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64
@@ -370,6 +381,7 @@ pipeline {
       steps {
         container('docker-client') {
           sh """
+            set -euxo pipefail
             echo "📊 Build Report"
             echo "=============="
             echo "Image: ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}"
@@ -394,6 +406,7 @@ pipeline {
       // container('docker-client') {
       //   // (Optioanl, images already removed after each Pod dies in each build) Cleanup local images to save space
       //   sh """
+      //     set -euxo pipefail
       //     echo "🧹 Cleaning up..."
       //     docker rmi ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-amd64 || true
       //     docker rmi ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-arm64 || true
