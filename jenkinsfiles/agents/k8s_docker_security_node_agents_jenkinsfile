@@ -1,8 +1,9 @@
 import groovy.transform.Field
 
+// Variables
+@Field String imageName = params.DOCKERFILE == 'Dockerfile_http' ? 'plain-node-http-server' : 'plain-node-express-server'
 // Constants
-@Field final String IMAGE_NAME = params.DOCKERFILE == 'Dockerfile_http' ? 'plain-node-http-server' : 'plain-node-express-server'
-@Field final String FULL_IMAGE_NAME = "cv47522/${IMAGE_NAME}"
+@Field final String FULL_IMAGE_NAME = "cv47522/${imageName}"
 
 pipeline {
   agent {
@@ -294,7 +295,7 @@ pipeline {
                   trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --format template \
                     --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-${ARCH}.html
+                    -o security-report_${imageName}_${IMAGE_TAG}-${ARCH}.html
                 """
               }
             }
@@ -316,7 +317,7 @@ pipeline {
                   trivy image ${FULL_IMAGE_NAME}:${IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --format template \
                     --template "@${PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${IMAGE_NAME}_${IMAGE_TAG}-${ARCH}.html
+                    -o security-report_${imageName}_${IMAGE_TAG}-${ARCH}.html
                 """
               }
             }
