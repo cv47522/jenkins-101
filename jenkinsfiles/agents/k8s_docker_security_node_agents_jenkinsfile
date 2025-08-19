@@ -18,11 +18,11 @@ pipeline {
   }
 
   environment { // Keep env block simple; avoid Groovy functions here
-    env.PROJECTDIR = "${WORKSPACE}"
+    PROJECTDIR = "${env.WORKSPACE}"
     NODE_PROJECT = "${env.PROJECTDIR}/node_project"
     PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
-    env.IMAGE_TAG = "${BUILD_NUMBER}"
-    // env.BUILD_DATE and env.GIT_COMMIT_SHORT are set at runtime in "Init Runtime Vars"
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+    // BUILD_DATE and GIT_COMMIT_SHORT are set at runtime in "Init Runtime Vars"
   }
 
   parameters {
