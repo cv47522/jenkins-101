@@ -10,7 +10,7 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 5, unit: 'MINUTES')
+    timeout(time: 10, unit: 'MINUTES')
   }
 
   environment {
@@ -132,15 +132,13 @@ pipeline {
             )
           ])
           {
-            sh """
+            sh '''
               # Write a minimal .npmrc in the workspace (or to HOME)
               cat > .npmrc <<EOF
 registry=https://registry.npmjs.org/
 //registry.npmjs.org/:_authToken=${NPM_TOKEN}
 EOF
-            """
-            echo "------------ (Dry-run) Deploying 'next' version (Beta version) ------------"
-            sh """
+              echo "------------ (Dry-run) Deploying 'next' version (Beta version) ------------"
               # Verify authentication
               npm whoami
 
@@ -151,7 +149,7 @@ EOF
               # Or
               # Publishes with tag "next"
               npm publish --dry-run --tag next
-            """
+            '''
           }
         }
       }

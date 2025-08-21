@@ -45,6 +45,12 @@ spec:
         - name: docker-sock # Shared with client(s)
           mountPath: /var/run
 
+    # Dockerfile linting
+    - name: hadolint
+      image: hadolint/hadolint:v2.13.1-beta4-alpine
+      command: ["cat"]
+      tty: true
+
     # Application build tools container
     - name: node
       image: node:22-alpine3.21

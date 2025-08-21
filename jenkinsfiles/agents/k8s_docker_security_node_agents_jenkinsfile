@@ -14,11 +14,12 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 5, unit: 'MINUTES')
+    timeout(time: 10, unit: 'MINUTES')
   }
 
   environment { // Keep env block simple; avoid Groovy functions here
     PROJECTDIR = "${env.WORKSPACE}"
+    REPORT_TEMPLATE = "${PROJECTDIR}/security_scan/trivy/templates/html.tpl"
     NODE_PROJECT = "${env.PROJECTDIR}/node_project"
     PACKAGE_NAME = '@cv47522/node-project'  // Scoped pkg name
     IMAGE_TAG = "${env.BUILD_NUMBER}"
@@ -134,7 +135,6 @@ pipeline {
             usernamePassword(credentialsId: 'dockerhub-credentials',
               usernameVariable: 'HUB_USER', passwordVariable: 'HUB_PASS')
           ]) {
-            // NOTE: single-quoted Groovy string => no interpolation leakage
             // The same /root/.docker/config.json is reused by all CLI calls in the pod.
             sh """
               set -euxo pipefail
@@ -172,13 +172,16 @@ pipeline {
               //   set -euxo pipefail
               //   docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" \
               //     ${params.DOCKER_REGISTRY}/hadolint/hadolint \
-              //     hadolint --verbose ${DOCKERFILE}
+              //     hadolint --verbose ${params.DOCKERFILE}
               // """
             }
           }
           // (Method 3)
           // container('hadolint') { // TODO: Add 'hadolint' container to pod.yaml
-          //   sh "hadolint --verbose --failure-threshold warning ${DOCKERFILE}"
+          //   sh """
+          //      set -euxo pipefail
+          //      hadolint --verbose --failure-threshold warning ${params.DOCKERFILE}
+          //    """
           // }
         }
       }
@@ -297,7 +300,8 @@ pipeline {
       }
     }
 
-    stage('Security Scanning') {
+    stage('Security Scanning (Local Images)') {
+      // Local image scan requires mounting docker socket
       parallel {
         stage('Scan AMD64') {
           environment {
@@ -314,8 +318,8 @@ pipeline {
                     --exit-code 0 --severity HIGH,CRITICAL --format table
                   trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --format template \
-                    --template "@${env.PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${env.IMAGE_NAME}_${env.IMAGE_TAG}-${ARCH}.html
+                    --template "@${env.REPORT_TEMPLATE}" \
+                    -o security-report_${env.IMAGE_NAME}-${ARCH}.html
                 """
               }
             }
@@ -337,8 +341,8 @@ pipeline {
                     --exit-code 0 --severity HIGH,CRITICAL --format table
                   trivy image ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
                     --exit-code 0 --format template \
-                    --template "@${env.PROJECTDIR}/security_scan/trivy/html.tpl" \
-                    -o security-report_${env.IMAGE_NAME}_${env.IMAGE_TAG}-${ARCH}.html
+                    --template "@${env.REPORT_TEMPLATE}" \
+                    -o security-report_${env.IMAGE_NAME}-${ARCH}.html
                 """
               }
             }
@@ -372,6 +376,51 @@ pipeline {
               echo "🚀 Multi-arch image published successfully!"
               docker logout
           """
+          }
+        }
+      }
+    }
+
+    stage('Security Scanning (Remote Images)') {
+      // (After pushing images) Remote image scan doesn't require mounting docker socket
+      parallel {
+        stage('Scan AMD64') {
+          environment {
+            ARCH = 'amd64'
+            TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache/${ARCH}"
+          }
+          steps {
+            container('trivy') {
+              dir(NODE_PROJECT) {
+                sh """
+                  set -euxo pipefail
+                  echo "🔍 Scanning AMD64 image for vulnerabilities..."
+                  trivy image --image-src remote \
+                    ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
+                    --exit-code 0 --severity HIGH,CRITICAL --format table
+                """
+              }
+            }
+          }
+        }
+
+        stage('Scan ARM64') {
+          environment {
+            ARCH = 'arm64'
+            TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache/${ARCH}"
+          }
+          steps {
+            container('trivy') {
+              dir(NODE_PROJECT) {
+                sh """
+                  set -euxo pipefail
+                  echo "🔍 Scanning ARM64 image for vulnerabilities..."
+                  trivy image --image-src remote \
+                    ${env.FULL_IMAGE_NAME}:${env.IMAGE_TAG}-${ARCH} \
+                    --exit-code 0 --severity HIGH,CRITICAL --format table
+                """
+              }
+            }
           }
         }
       }

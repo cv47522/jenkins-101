@@ -14,7 +14,7 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 5, unit: 'MINUTES')
+    timeout(time: 10, unit: 'MINUTES')
   }
 
   environment {
@@ -67,10 +67,10 @@ pipeline {
             echo "=== Network Diagnostics ==="
             echo "DNS Resolution:"
             nslookup registry.npmjs.org || echo "DNS resolution failed"
-            
+
             echo "Proxy Environment:"
             env | grep -i proxy || echo "No proxy environment variables"
-            
+
             echo "Connectivity Test:"
             curl -I --connect-timeout 10 https://registry.npmjs.org/ || echo "Direct connection failed"
             curl -I --connect-timeout 10 --proxy ${env.HTTP_PROXY} https://registry.npmjs.org/ || echo "Proxy connection failed"
@@ -82,7 +82,7 @@ pipeline {
     stage('Get Package Version') {
       steps {
         script {
-          dir(NODE_PROJECT) {
+          dir(env.NODE_PROJECT) {
             // (Method 1) Install Jenkins plugin: Pipeline Utility Steps) Extract version from package.json
             def packageJson = readJSON file: 'package.json'
             String packageVersion = packageJson.version
@@ -91,8 +91,8 @@ pipeline {
             //   npm pkg get version | tr -d '"'
             // ''', returnStdout: true).trim()
 
-            echo "Resolved ${PACKAGE_NAME} Node.js Package Version: ${packageVersion}"
-            currentBuild.displayName = "${PACKAGE_NAME}-${packageVersion}/${BUILD_NUMBER}"
+            echo "Resolved ${env.PACKAGE_NAME} Node.js Package Version: ${packageVersion}"
+            currentBuild.displayName = "${env.PACKAGE_NAME}-${packageVersion}/${env.BUILD_NUMBER}"
           }
         }
       }
@@ -100,13 +100,13 @@ pipeline {
 
     stage('Install Dependencies') {
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           echo '------------ Installing Dependencies ------------'
           sh """
             node -v
             npm -v
             npm ci --omit=dev
-            npm list
+            npm list --omit=dev
           """
         }
       }
@@ -114,7 +114,7 @@ pipeline {
 
     stage('Build Application') {
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           echo "------------ Building ------------"
           sh """
             echo "Running build (if present)";
@@ -126,7 +126,7 @@ pipeline {
 
     stage('Test') {
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           echo "------------ Testing ------------"
           sh """
             echo "Running tests (if present)";
@@ -139,7 +139,7 @@ pipeline {
     stage('Package') {
       steps {
         script {
-          dir(NODE_PROJECT) {
+          dir(env.NODE_PROJECT) {
             echo "------------ Packaging ------------"
             sh """
               npm run package || npm pack
@@ -151,7 +151,7 @@ pipeline {
 
     stage('(Dry-Run) Deploy to Staging') {
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           // Inject npm token into env var
           withCredentials([
             usernamePassword(
@@ -161,16 +161,14 @@ pipeline {
             )
           ])
           {
-            sh """
+            sh '''
               # Write a minimal .npmrc in the workspace (or to HOME)
               cat > .npmrc <<EOF
 registry=https://registry.npmjs.org/
 always-auth=true
 //registry.npmjs.org/:_authToken=${NPM_TOKEN}
 EOF
-            """
-            echo "------------ (Dry-run) Deploying 'next' version (Beta version) ------------"
-            sh """
+              echo "------------ (Dry-run) Deploying 'next' version (Beta version) ------------"
               # Verify authentication
               npm whoami
 
@@ -181,7 +179,7 @@ EOF
               # Or
               # Publish with tag "next"
               npm publish --dry-run --tag next
-            """
+            '''
           }
         }
       }
@@ -189,7 +187,7 @@ EOF
 
     stage('(Real) Deploy to Staging') {
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           echo "------------ (Real) Deploying 'next' version (Beta version) ------------"
           sh """
             # Verify authentication
@@ -203,10 +201,10 @@ EOF
             sleep 20
 
             # Fetch published pkg info
-             npm info "${PACKAGE_NAME}" --json
+             npm info "${env.PACKAGE_NAME}" --json
 
             # Check available tags
-            npm dist-tag ls "${PACKAGE_NAME}"
+            npm dist-tag ls "${env.PACKAGE_NAME}"
           """
         }
       }
@@ -214,7 +212,7 @@ EOF
 
     stage('Test in Staging Env') {
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           echo "------------ Installing 'next' version (Beta version) ------------"
           sh """
             # Create a test directory to avoid conflicts
@@ -225,13 +223,13 @@ EOF
             npm init -y
 
             # Install the next version
-            npm install ${PACKAGE_NAME}@next
+            npm install ${env.PACKAGE_NAME}@next
 
             # Verify installation
-            npm list "${PACKAGE_NAME}"
+            npm list "${env.PACKAGE_NAME}"
 
             # Optional: Run basic smoke test
-            node -e "console.log('Testing package:', require('${PACKAGE_NAME}'))"
+            node -e "console.log('Testing package:', require('${env.PACKAGE_NAME}'))"
           """
         }
       }
@@ -240,18 +238,106 @@ EOF
     stage('Deploy to Production') {
       // when { branch 'master' }
       steps {
-        dir(NODE_PROJECT) {
+        dir(env.NODE_PROJECT) {
           echo "------------ Promoting to 'latest' (Production) ------------"
           sh """
             # Promote the current version from next to latest
-            npm dist-tag add ${PACKAGE_NAME}@${packageVersion} latest
+            npm dist-tag add ${env.PACKAGE_NAME}@${packageVersion} latest
 
             # Verify the tags
-            npm dist-tag ls ${PACKAGE_NAME}
+            npm dist-tag ls ${env.PACKAGE_NAME}
 
             # Show final package info
-            npm info ${PACKAGE_NAME} version dist-tags
+            npm info ${env.PACKAGE_NAME} version dist-tags
           """
+        }
+      }
+    }
+
+
+    stage('Increase Pkg Version') {
+      // when {
+      //   anyOf {
+      //     branch 'main'
+      //     branch 'master'
+      //     expression { return env.BRANCH_NAME ==~ /^release\/.*/ }
+      //   }
+      // }
+      steps {
+        script {
+          // Doc: https://www.jenkins.io/doc/pipeline/steps/lockable-resources/
+          // - inversePrecedence: false (Default) - (Oldest build first) Waiting builds get the lock in the same order they requested to acquire it.
+          // - inversePrecedence: true - the newest build in the waiting queue will get the lock first.
+          lock(resource: "version-bump-${env.PACKAGE_NAME}", inversePrecedence: true) {
+            dir(env.NODE_PROJECT) {
+              // - `--no-git-tag-version` lets npm update package.json + package-lock.json without calling git, so it runs happily in the Node container.
+              // - `--ignore-scripts` prevents preversion from running tests during the bump.
+              // - Workspace is shared between containers, so .new_version is visible in both.
+              // - The lock prevents two builds from racing to bump the version.
+              // - The branch guard ensures bumps only happen on release branches.
+              // - Tag and commit names are consistent (vX.Y.Z) and we use --force-with-lease to refresh a tag safely if it already exists.
+
+              // 1. Bump files (no git) in the Node container
+              container('node') {
+                // Pick which part to bump/increase: patch|minor|major|prerelease
+                final String NPM_VERSION_BUMP = 'patch'
+                sh """
+                  set -euo pipefail
+
+                  npm --version
+                  # Skip npm lifecycle scripts (preversion/test/etc.)
+                  npm version ${NPM_VERSION_BUMP} --no-git-tag-version --ignore-scripts
+                  node --print "require('./package.json').version" > .new_version
+                  cat .new_version
+                """
+              }
+              // 2. Commit + tag + push in the JNLP container (has git)
+              container('jnlp') {
+                final String BRANCH = 'master'
+                // final String BRANCH = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                final String NEW_VERSION = sh(script: 'cat .new_version', returnStdout: true).trim()
+                final String TAG = "v${NEW_VERSION}"
+                final String GIT_BOT_NAME = 'jenkins-bot'
+                final String GIT_BOT_EMAIL = 'jenkins-bot@example.com'
+                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+                  // NOTE: single-quoted Groovy string => no interpolation leakage
+                  sh '''
+                    # Use bash explicitly; jnlp /bin/sh may not support -o pipefail
+                    bash -lc '
+                      set -euo pipefail
+
+                      # Configure Git identity for the bot
+                      git config url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+                    '
+                  '''
+                }
+                sh """
+                  # Use bash explicitly; jnlp /bin/sh may not support -o pipefail
+                  bash -lc '
+                    set -euo pipefail
+
+                    # Configure Git identity for the bot
+                    git config user.name ${GIT_BOT_NAME}
+                    git config user.email ${GIT_BOT_EMAIL}
+                    git remote set-url origin https://github.com/cv47522/jenkins-101.git
+
+                    git add package.json package-lock.json
+                    git commit -m "chore(release): ${TAG} [skip ci]"
+                    git tag "${TAG}"
+
+                    # Rebase to latest to reduce conflicts
+                    git pull --rebase origin ${BRANCH}
+
+                    # Push commit and the tag created by npm version
+                    git push origin HEAD:${BRANCH}
+                    git push --force-with-lease origin "${TAG}"
+
+                    echo "✅ Bumped to ${TAG} and pushed to ${BRANCH}"
+                  '
+                """
+              }
+            }
+          }
         }
       }
     }
@@ -259,16 +345,16 @@ EOF
 
   post {
     always {
-      dir(NODE_PROJECT) {
+      dir(env.NODE_PROJECT) {
         archiveArtifacts artifacts: '*.tgz', fingerprint: true
       }
       cleanWs()
     }
     success {
       echo "✅ Deployment pipeline completed successfully!"
-      echo "📦 Package: ${PACKAGE_NAME}@${packageVersion}"
-      echo "🏷️ Next: npm install ${PACKAGE_NAME}@next"
-      echo "🚀 Latest: npm install ${PACKAGE_NAME} (after promotion)"
+      echo "📦 Package: ${env.PACKAGE_NAME}@${packageVersion}"
+      echo "🏷️ Next: npm install ${env.PACKAGE_NAME}@next"
+      echo "🚀 Latest: npm install ${env.PACKAGE_NAME} (after promotion)"
     }
     failure {
       echo "❌ Deployment pipeline failed. Check logs above."

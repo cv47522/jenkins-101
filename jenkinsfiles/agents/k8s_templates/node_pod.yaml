@@ -4,6 +4,8 @@ spec:
   serviceAccountName: jenkins-sa
   imagePullSecrets: # Add this to increase docker pull rate limit
     - name: dockerhub-secret
+    # Or Use below to pull from intenal registry
+    # - name: docker-company-secret
   containers:
     # (Optional) Pin JNLP image version
     - name: jnlp

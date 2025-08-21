@@ -10,7 +10,7 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 5, unit: 'MINUTES')
+    timeout(time: 10, unit: 'MINUTES')
   }
 
   environment {
@@ -110,10 +110,10 @@ pipeline {
           //   [string(credentialsId:'pypi-token', var:'TOKEN')]
           // )
           // {
-          //   sh """
+          //   sh '''
           //     pip install twine
-          //     twine upload -u __token__ -p $TOKEN dist/*
-          //   """
+          //     twine upload -u __token__ -p ${TOKEN} dist/*
+          //   '''
           // }
         }
       }

@@ -14,7 +14,7 @@ pipeline {
     // disableConcurrentBuilds()
     buildDiscarder(logRotator(daysToKeepStr: '30', artifactDaysToKeepStr: '1'))
     timestamps()
-    timeout(time: 5, unit: 'MINUTES')
+    timeout(time: 10, unit: 'MINUTES')
   }
 
   environment {
@@ -145,7 +145,6 @@ pipeline {
             usernamePassword(credentialsId: 'dockerhub-credentials',
               usernameVariable: 'HUB_USER', passwordVariable: 'HUB_PASS')
           ]) {
-            // NOTE: single-quoted Groovy string => no interpolation leakage
             // The same /root/.docker/config.json is reused by all CLI calls in the pod.
             sh """
               echo "🔐 Login -> internal registry..."
